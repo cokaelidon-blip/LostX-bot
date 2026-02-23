@@ -2,7 +2,7 @@
 import os
 
 # Bot Configuration
-BOT_TOKEN = os.environ.get('BOT_TOKEN', '8273127925:AAGPDqYbvIyvF2vXcHMM8dnk7luAqZwzowM')
+BOT_TOKEN = os.environ.get('BOT_TOKEN', '')
 
 # Admin Configuration
 ADMIN_USERNAME = os.environ.get('ADMIN_USERNAME', 'El1don_07')

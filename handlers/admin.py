@@ -55,10 +55,11 @@ No users found."
             status = "✅" if user['is_active'] else "❌"
             text += f"{status} <b>{escape_html(user['username'])}</b> - ${user['balance']:.2f}\n"
 
-    text += "
-To manage a user, use commands:\n"
-    text += "<code>/toggleuser username</code> - Enable/Disable\n"
-    text += "<code>/resetdevice username</code> - Reset device binding"
+    text += """
+
+To manage a user, use commands:
+<code>/toggleuser username</code> - Enable/Disable
+<code>/resetdevice username</code> - Reset device binding"""
 
     await query.edit_message_text(text,
                                   reply_markup=get_admin_keyboard(),
@@ -88,12 +89,15 @@ async def view_stock_callback(update: Update,
         return
 
     stock = get_stock_count()
-    text = "📦 <b>Current Stock</b>
-"
-    text += f"• 1 Day Keys: <b>{stock.get(1, 0)}</b>\n"
-    text += f"• 7 Days Keys: <b>{stock.get(7, 0)}</b>\n"
-    text += f"• 1 Month Keys: <b>{stock.get(30, 0)}</b>\n"
-    text += f"\n<b>Total: {sum(stock.values())} keys</b>"
+    text = f"""
+📦 <b>Current Stock</b>
+
+• 1 Day Keys: <b>{stock.get(1, 0)}</b>
+• 7 Days Keys: <b>{stock.get(7, 0)}</b>
+• 1 Month Keys: <b>{stock.get(30, 0)}</b>
+
+<b>Total: {sum(stock.values())} keys</b>
+    """
 
     await query.edit_message_text(text,
                                   reply_markup=get_keys_management_keyboard(),
@@ -131,8 +135,11 @@ async def add_custom_keys_start(update: Update,
         await query.edit_message_text("❌ Access denied.")
         return ConversationHandler.END
 
-    await query.edit_message_text("<b>Step 1: Select Key Duration</b>
-Please choose the duration for the keys you are about to add:",
+    await query.edit_message_text("""
+<b>Step 1: Select Key Duration</b>
+
+Please choose the duration for the keys you are about to add:
+                                  """,
                                   reply_markup=get_duration_selection_keyboard(),
                                   parse_mode=ParseMode.HTML)
     return SELECT_KEY_DURATION
@@ -144,9 +151,13 @@ async def select_key_duration(update: Update,
     await query.answer()
     duration = int(query.data.replace("duration_select_", ""))
     context.user_data['bulk_add_duration'] = duration
-    await query.edit_message_text(f"<b>Step 2: Paste Your Keys</b>
+    await query.edit_message_text(f"""
+<b>Step 2: Paste Your Keys</b>
+
 You have selected <b>{duration} days</b> duration.
-Please send a message containing the list of keys. Each key must be on a <b>new line</b>.",
+
+Please send a message containing the list of keys. Each key must be on a <b>new line</b>.
+                                  """,
                                   parse_mode=ParseMode.HTML)
     return RECEIVE_KEYS_LIST
 
@@ -171,13 +182,15 @@ async def receive_keys_list(update: Update, context: ContextTypes.DEFAULT_TYPE):
             success_count += 1
         else:
             fail_count += 1
-            failed_keys.append(f"<code>{escape_html(key)}</code> ({result})")
+            failed_keys.append(f"<code>{escape_html(key)}</code> ({escape_html(result)})")
 
-    report = f"✅ <b>Bulk Add Report</b>
-"
-    report += f"Total keys processed: <b>{len(keys_list)}</b>\n"
-    report += f"Successfully added: <b>{success_count}</b>\n"
-    report += f"Failed (duplicates): <b>{fail_count}</b>\n"
+    report = f"""
+✅ <b>Bulk Add Report</b>
+
+Total keys processed: <b>{len(keys_list)}</b>
+Successfully added: <b>{success_count}</b>
+Failed (duplicates): <b>{fail_count}</b>
+    """
     if failed_keys:
         report += "\n<b>Failed Keys:</b>\n" + "\n".join(failed_keys)
 
@@ -221,11 +234,16 @@ async def create_user_password(update: Update,
     except: pass
     success, result = create_user(username, password)
     if success:
-        await update.message.reply_text(f"✅ <b>User Created Successfully!</b>
-👤 Username: <code>{escape_html(username)}</code>\n🔑 Password: <code>{escape_html(password)}</code>
-Share these credentials with the user.", parse_mode=ParseMode.HTML)
+        await update.message.reply_text(f"""
+✅ <b>User Created Successfully!</b>
+
+👤 Username: <code>{escape_html(username)}</code>
+🔑 Password: <code>{escape_html(password)}</code>
+
+Share these credentials with the user.
+        """, parse_mode=ParseMode.HTML)
     else:
-        await update.message.reply_text(f"❌ Failed to create user: {result}")
+        await update.message.reply_text(f"❌ Failed to create user: {escape_html(result)}")
     return ConversationHandler.END
 
 
@@ -250,8 +268,12 @@ async def add_balance_username(update: Update,
         return ConversationHandler.END
     context.user_data['balance_user_id'] = user['id']
     context.user_data['balance_username'] = username
-    await update.message.reply_text(f"👤 User: <b>{escape_html(username)}</b>\n💰 Current Balance: <b>${user['balance']:.2f}</b>
-Enter the amount to add (in USD):", parse_mode=ParseMode.HTML)
+    await update.message.reply_text(f"""
+👤 User: <b>{escape_html(username)}</b>
+💰 Current Balance: <b>${user['balance']:.2f}</b>
+
+Enter the amount to add (in USD):
+    """, parse_mode=ParseMode.HTML)
     return ADD_BALANCE_AMOUNT
 
 
@@ -265,8 +287,12 @@ async def add_balance_amount(update: Update,
     user_id = context.user_data.get('balance_user_id')
     username = context.user_data.get('balance_username')
     update_balance(user_id, amount, 'admin_add', 'Added by admin')
-    await update.message.reply_text(f"✅ <b>Balance Added Successfully!</b>
-👤 User: <b>{escape_html(username)}</b>\n💵 Amount Added: <b>${amount:.2f}</b>", parse_mode=ParseMode.HTML)
+    await update.message.reply_text(f"""
+✅ <b>Balance Added Successfully!</b>
+
+👤 User: <b>{escape_html(username)}</b>
+💵 Amount Added: <b>${amount:.2f}</b>
+    """, parse_mode=ParseMode.HTML)
     return ConversationHandler.END
 
 
@@ -318,8 +344,11 @@ async def admin_set_link_start(update: Update, context: ContextTypes.DEFAULT_TYP
     if not is_admin(check_session(update.effective_user.id)):
         await query.edit_message_text("❌ Access denied.")
         return ConversationHandler.END
-    await query.edit_message_text("🔗 <b>Update IPA Link</b>
-Please send me the new IPA link now. Send /cancel to abort.", parse_mode=ParseMode.HTML)
+    await query.edit_message_text("""
+🔗 <b>Update IPA Link</b>
+
+Please send me the new IPA link now. Send /cancel to abort.
+    """, parse_mode=ParseMode.HTML)
     return SET_IPA_LINK
 
 

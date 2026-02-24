@@ -1,6 +1,2 @@
-python-telegram-bot==22.6
-httpx
-httpx
-python-telegram-bot==22.6
-telegram
+python-telegram-bot>=20.0
 psycopg2-binary

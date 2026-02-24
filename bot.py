@@ -8,8 +8,7 @@ from database import init_database
 from handlers.common import (start, login_start, login_username, login_password,
                            cancel_login, logout_callback, unknown_command,
                            USERNAME, PASSWORD)
-from handlers.user import (dashboard_callback, modder_ipa_menu_callback,
-                           buy_key_callback, download_ipa_callback, history_callback)
+from handlers.user import * # Import all user handlers
 from handlers.admin import * # Import all admin handlers
 
 # Set up logging
@@ -82,9 +81,11 @@ def main() -> None:
     application.add_handler(CallbackQueryHandler(logout_callback, pattern='^logout$'))
     application.add_handler(CallbackQueryHandler(dashboard_callback, pattern='^back_to_dashboard$'))
     application.add_handler(CallbackQueryHandler(modder_ipa_menu_callback, pattern='^modder_ipa_menu$'))
-    application.add_handler(CallbackQueryHandler(buy_key_callback, pattern='^buy_plan_'))
+    application.add_githandler(CallbackQueryHandler(buy_key_callback, pattern='^buy_plan_'))
     application.add_handler(CallbackQueryHandler(download_ipa_callback, pattern='^download_ipa$'))
-    # application.add_handler(CallbackQueryHandler(history_callback, pattern='^history$')) # Disabled for now
+    # --- HANDLERS FOR NEW BUTTONS ---
+    application.add_handler(CallbackQueryHandler(history_callback, pattern='^history$'))
+    application.add_handler(CallbackQueryHandler(check_balance_callback, pattern='^check_balance$'))
 
     # Admin Callbacks
     application.add_handler(CallbackQueryHandler(admin_panel_callback, pattern='^admin_panel$'))

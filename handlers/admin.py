@@ -1,9 +1,9 @@
 # handlers/admin.py
+import html
 from telegram import Update
 from telegram.ext import (ContextTypes, ConversationHandler,
                           CallbackQueryHandler, MessageHandler, filters)
 from telegram.constants import ParseMode
-from telegram.helpers import escape_html
 
 from database import (check_session, create_user, get_all_users,
                       get_user_by_username, update_balance, add_key_to_stock,
@@ -30,8 +30,7 @@ async def admin_panel_callback(update: Update,
         await query.edit_message_text("❌ Access denied. Admin only.")
         return
 
-    await query.edit_message_text("⚙️ <b>Admin Panel</b>
-Select an option:",
+    await query.edit_message_text("⚙️ <b>Admin Panel</b>\n\nSelect an option:",
                                   reply_markup=get_admin_keyboard(),
                                   parse_mode=ParseMode.HTML)
 
@@ -46,14 +45,12 @@ async def admin_users_callback(update: Update,
 
     users = get_all_users()
     if not users:
-        text = "👥 <b>User Management</b>
-No users found."
+        text = "👥 <b>User Management</b>\n\nNo users found."
     else:
-        text = "👥 <b>User Management</b>
-"
+        text = "👥 <b>User Management</b>\n\n"
         for user in users[:20]:
             status = "✅" if user['is_active'] else "❌"
-            text += f"{status} <b>{escape_html(user['username'])}</b> - ${user['balance']:.2f}\n"
+            text += f"{status} <b>{html.escape(user['username'])}</b> - ${user['balance']:.2f}\n"
 
     text += """
 
@@ -74,8 +71,7 @@ async def admin_keys_callback(update: Update,
         await query.edit_message_text("❌ Access denied.")
         return
 
-    await query.edit_message_text("🔑 <b>Keys Stock Management</b>
-Select an option:",
+    await query.edit_message_text("🔑 <b>Keys Stock Management</b>\n\nSelect an option:",
                                   reply_markup=get_keys_management_keyboard(),
                                   parse_mode=ParseMode.HTML)
 
@@ -182,7 +178,7 @@ async def receive_keys_list(update: Update, context: ContextTypes.DEFAULT_TYPE):
             success_count += 1
         else:
             fail_count += 1
-            failed_keys.append(f"<code>{escape_html(key)}</code> ({escape_html(result)})")
+            failed_keys.append(f"<code>{html.escape(key)}</code> ({html.escape(str(result))})")
 
     report = f"""
 ✅ <b>Bulk Add Report</b>
@@ -214,8 +210,7 @@ async def admin_create_user_callback(update: Update,
     if not is_admin(check_session(update.effective_user.id)):
         await query.edit_message_text("❌ Access denied.")
         return ConversationHandler.END
-    await query.edit_message_text("➕ <b>Create New User</b>
-Enter the username for the new user:", parse_mode=ParseMode.HTML)
+    await query.edit_message_text("➕ <b>Create New User</b>\n\nEnter the username for the new user:", parse_mode=ParseMode.HTML)
     return CREATE_USER_USERNAME
 
 
@@ -237,13 +232,13 @@ async def create_user_password(update: Update,
         await update.message.reply_text(f"""
 ✅ <b>User Created Successfully!</b>
 
-👤 Username: <code>{escape_html(username)}</code>
-🔑 Password: <code>{escape_html(password)}</code>
+👤 Username: <code>{html.escape(username)}</code>
+🔑 Password: <code>{html.escape(password)}</code>
 
 Share these credentials with the user.
         """, parse_mode=ParseMode.HTML)
     else:
-        await update.message.reply_text(f"❌ Failed to create user: {escape_html(result)}")
+        await update.message.reply_text(f"❌ Failed to create user: {html.escape(str(result))}")
     return ConversationHandler.END
 
 
@@ -254,8 +249,7 @@ async def admin_add_balance_callback(update: Update,
     if not is_admin(check_session(update.effective_user.id)):
         await query.edit_message_text("❌ Access denied.")
         return ConversationHandler.END
-    await query.edit_message_text("💵 <b>Add Balance</b>
-Enter the username:", parse_mode=ParseMode.HTML)
+    await query.edit_message_text("💵 <b>Add Balance</b>\n\nEnter the username:", parse_mode=ParseMode.HTML)
     return ADD_BALANCE_USERNAME
 
 
@@ -269,7 +263,7 @@ async def add_balance_username(update: Update,
     context.user_data['balance_user_id'] = user['id']
     context.user_data['balance_username'] = username
     await update.message.reply_text(f"""
-👤 User: <b>{escape_html(username)}</b>
+👤 User: <b>{html.escape(username)}</b>
 💰 Current Balance: <b>${user['balance']:.2f}</b>
 
 Enter the amount to add (in USD):
@@ -290,7 +284,7 @@ async def add_balance_amount(update: Update,
     await update.message.reply_text(f"""
 ✅ <b>Balance Added Successfully!</b>
 
-👤 User: <b>{escape_html(username)}</b>
+👤 User: <b>{html.escape(username)}</b>
 💵 Amount Added: <b>${amount:.2f}</b>
     """, parse_mode=ParseMode.HTML)
     return ConversationHandler.END
@@ -299,8 +293,7 @@ async def add_balance_amount(update: Update,
 async def cancel_admin_action(update: Update,
                               context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("❌ Action cancelled.")
-    await update.message.reply_text("⚙️ <b>Admin Panel</b>
-Select an option:", reply_markup=get_admin_keyboard(), parse_mode=ParseMode.HTML)
+    await update.message.reply_text("⚙️ <b>Admin Panel</b>\n\nSelect an option:", reply_markup=get_admin_keyboard(), parse_mode=ParseMode.HTML)
     return ConversationHandler.END
 
 
@@ -318,7 +311,7 @@ async def toggle_user_command(update: Update,
         await update.message.reply_text("❌ User not found.")
         return
     toggle_user_status(user['id'])
-    await update.message.reply_text(f"✅ User <b>{escape_html(username)}</b> status toggled.", parse_mode=ParseMode.HTML)
+    await update.message.reply_text(f"✅ User <b>{html.escape(username)}</b> status toggled.", parse_mode=ParseMode.HTML)
 
 
 async def reset_device_command(update: Update,
@@ -335,7 +328,7 @@ async def reset_device_command(update: Update,
         await update.message.reply_text("❌ User not found.")
         return
     reset_user_device(user['id'])
-    await update.message.reply_text(f"✅ Device binding reset for <b>{escape_html(username)}</b>.", parse_mode=ParseMode.HTML)
+    await update.message.reply_text(f"✅ Device binding reset for <b>{html.escape(username)}</b>.", parse_mode=ParseMode.HTML)
 
 
 async def admin_set_link_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -356,8 +349,6 @@ async def admin_receive_new_link(update: Update,
                                  context: ContextTypes.DEFAULT_TYPE):
     new_link = update.message.text
     update_setting('ipa_link', new_link)
-    await update.message.reply_text("✅ <b>Link Updated Successfully!</b>
-New link is now set.", parse_mode=ParseMode.HTML)
-    await update.message.reply_text("⚙️ <b>Admin Panel</b>
-Select an option:", reply_markup=get_admin_keyboard(), parse_mode=ParseMode.HTML)
+    await update.message.reply_text("✅ <b>Link Updated Successfully!</b>\n\nNew link is now set.", parse_mode=ParseMode.HTML)
+    await update.message.reply_text("⚙️ <b>Admin Panel</b>\n\nSelect an option:", reply_markup=get_admin_keyboard(), parse_mode=ParseMode.HTML)
     return ConversationHandler.END

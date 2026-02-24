@@ -7,7 +7,7 @@ from telegram.constants import ParseMode
 from database import (check_session, authenticate_user, create_user, logout_user,
                       promote_user_to_admin, get_user_by_telegram_id)
 from keyboards import get_start_keyboard, get_dashboard_keyboard
-from config import ADMIN_IDS, ADMIN_USERNAME, ADMIN_PASSWORD
+from config import ADMIN_IDS, ADMIN_USERNAME, ADMIN_PASSWORD, PRICING
 
 # States for login and register conversations
 USERNAME, PASSWORD = range(1, 3)
@@ -17,7 +17,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     telegram_id = update.effective_user.id
     user = get_user_by_telegram_id(telegram_id)
 
-    # --- NEW: Auto-create admin account if it doesn't exist ---
+    # --- Auto-create admin account if it doesn't exist ---
     if not user and telegram_id in ADMIN_IDS:
         if ADMIN_USERNAME and ADMIN_PASSWORD:
             # Create the admin user
@@ -54,10 +54,17 @@ You are already logged in.
             reply_markup=get_dashboard_keyboard(session['is_admin']),
             parse_mode=ParseMode.HTML)
     else:
-        welcome_text = """
+        # --- NEW: Show prices to non-logged-in users ---
+        price_list = "\n".join(
+            [f"• {plan['label']}: <b>${plan['price']:.2f}</b>" for plan in PRICING.values()]
+        )
+        welcome_text = f"""
 👋 <b>Welcome to the Modder IPA Bot!</b>
 
-Please log in to access your dashboard.
+Here are our available plans:
+{price_list}
+
+Please log in to purchase access.
         """
         await update.message.reply_text(welcome_text,
                                         reply_markup=get_start_keyboard(),
@@ -90,7 +97,6 @@ async def login_password(update: Update,
     success, result = authenticate_user(username, password, telegram_id)
 
     if success:
-        # --- Check for admin promotion right after login ---
         if telegram_id in ADMIN_IDS:
              promote_user_to_admin(telegram_id)
 

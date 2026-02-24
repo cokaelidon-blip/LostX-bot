@@ -4,8 +4,8 @@ from telegram import Update
 from telegram.ext import ContextTypes
 from telegram.constants import ParseMode
 
-from database import (check_session, get_setting, find_available_key,
-                      assign_key_to_user, update_balance)
+from database import (check_session, get_user_by_telegram_id, get_setting, find_available_key,
+                      assign_key_to_user, update_balance, get_user_purchase_history) # <-- Added get_user_purchase_history
 from keyboards import (get_main_dashboard_keyboard, get_modder_ipa_keyboard,
                        get_back_to_dashboard_keyboard)
 from config import PRICING
@@ -14,19 +14,30 @@ async def show_dashboard(update: Update, context: ContextTypes.DEFAULT_TYPE, ses
     """Displays the main user dashboard."""
     query = update.callback_query
     safe_username = html.escape(session['username'])
+    
+    # Fetch the latest user data to ensure balance is current
+    current_user_state = get_user_by_telegram_id(session['telegram_id'])
+    
     dashboard_text = f"""
 👋 Welcome, <b>{safe_username}</b>!
 
-💰 Your Balance: <b>${session['balance']:.2f}</b>
+💰 Your Balance: <b>${current_user_state['balance']:.2f}</b>
 
 Please choose an option below.
     """
-    keyboard = get_main_dashboard_keyboard(session['is_admin'])
+    keyboard = get_main_dashboard_keyboard(current_user_state['is_admin'])
     
     if query:
         await query.edit_message_text(dashboard_text, reply_markup=keyboard, parse_mode=ParseMode.HTML)
     else:
-        await update.message.reply_text(dashboard_text, reply_markup=keyboard, parse_mode=ParseMode.HTML)
+        # This handles the case for /start command or after login
+        await context.bot.send_message(
+            chat_id=update.effective_chat.id,
+            text=dashboard_text,
+            reply_markup=keyboard,
+            parse_mode=ParseMode.HTML
+        )
+
 
 async def dashboard_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handler for the 'Back to Dashboard' button."""
@@ -35,6 +46,45 @@ async def dashboard_callback(update: Update, context: ContextTypes.DEFAULT_TYPE)
         await update.callback_query.edit_message_text("Your session has expired. Please /start again.")
         return
     await show_dashboard(update, context, session)
+
+
+async def check_balance_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Refreshes the dashboard to show the latest balance."""
+    query = update.callback_query
+    await query.answer(text="🔄 Refreshing balance...", show_alert=False)
+    # Just call the main dashboard function which already fetches the latest balance
+    await dashboard_callback(update, context)
+
+
+async def history_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Displays the user's purchase history."""
+    query = update.callback_query
+    await query.answer()
+
+    session = check_session(update.effective_user.id)
+    if not session:
+        await query.edit_message_text("Your session has expired. Please /start again.")
+        return
+
+    history_items = get_user_purchase_history(session['id'])
+
+    if not history_items:
+        history_text = "You have no purchase history."
+    else:
+        # Format the history into a nice list
+        formatted_items = []
+        for item in history_items:
+            formatted_items.append(
+                f"• <b>{item['duration_days']}-Day Key</b> (<code>{item['key']}</code>)\n  Purchased on: {item['activation_date']}"
+            )
+        history_text = "📜 <b>Your Purchase History</b>\n\n" + "\n\n".join(formatted_items)
+
+    await query.edit_message_text(
+        history_text,
+        reply_markup=get_back_to_dashboard_keyboard(),
+        parse_mode=ParseMode.HTML
+    )
+
 
 async def modder_ipa_menu_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Displays the Modder IPA menu with buy options."""
@@ -47,6 +97,7 @@ async def modder_ipa_menu_callback(update: Update, context: ContextTypes.DEFAULT
 
     text = "📱 <b>Modder IPA Menu</b>\n\nPlease select an option to continue."
     await query.edit_message_text(text, reply_markup=get_modder_ipa_keyboard(), parse_mode=ParseMode.HTML)
+
 
 async def buy_key_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handles the logic when a user clicks a 'Buy' button."""
@@ -68,9 +119,11 @@ async def buy_key_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     price = plan['price']
     duration = plan['days']
     user_id = session['id']
-    user_balance = session['balance']
+    
+    # Get the most up-to-date user balance
+    current_user_state = get_user_by_telegram_id(session['telegram_id'])
+    user_balance = current_user_state['balance']
 
-    # 1. Check user balance
     if user_balance < price:
         await context.bot.send_message(
             chat_id=update.effective_chat.id,
@@ -79,7 +132,6 @@ async def buy_key_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         return
 
-    # 2. Check for key in stock
     available_key = find_available_key(duration)
     if not available_key:
         await context.bot.send_message(
@@ -89,17 +141,9 @@ async def buy_key_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         return
         
-    # 3. Process the purchase
-    # a. Deduct balance
-    success, _ = update_balance(user_id, price, 'debit')
-    if not success:
-        await context.bot.send_message(chat_id=update.effective_chat.id, text="An unexpected error occurred while updating your balance.")
-        return
-
-    # b. Assign key
+    update_balance(user_id, price, 'debit')
     assign_key_to_user(available_key['id'], user_id)
     
-    # 4. Notify user
     success_text = f"""
 ✅ <b>Purchase Successful!</b>
 
@@ -117,6 +161,7 @@ Your new balance is <b>${user_balance - price:.2f}</b>.
         reply_markup=get_back_to_dashboard_keyboard()
     )
 
+
 async def download_ipa_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Provides the IPA download link."""
     query = update.callback_query
@@ -127,8 +172,3 @@ async def download_ipa_callback(update: Update, context: ContextTypes.DEFAULT_TY
     else:
         text = f"⬇️ Here is your download link:\n\n{ipa_link}"
     await query.edit_message_text(text, reply_markup=get_back_to_dashboard_keyboard(), disable_web_page_preview=True)
-
-# Placeholder for history function
-async def history_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    query = update.callback_query
-    await query.answer("This feature is coming soon!", show_alert=True)

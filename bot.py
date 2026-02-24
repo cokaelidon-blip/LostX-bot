@@ -8,7 +8,6 @@ from database import init_database
 from handlers.common import (start, login_start, login_username, login_password,
                            cancel_login, logout_callback, unknown_command,
                            USERNAME, PASSWORD)
-# --- CORRECTED: Removed imports for deleted buy functions ---
 from handlers.user import (dashboard_callback, download_ipa_callback, add_balance_callback)
 from handlers.admin import (admin_panel_callback, admin_users_callback, admin_keys_callback,
                           view_stock_callback, admin_stats_callback, cancel_admin_action,
@@ -19,7 +18,7 @@ from handlers.admin import (admin_panel_callback, admin_users_callback, admin_ke
                           add_custom_keys_start, select_key_duration, receive_keys_list,
                           cancel_bulk_add, CREATE_USER_USERNAME, CREATE_USER_PASSWORD,
                           ADD_BALANCE_USERNAME, ADD_BALANCE_AMOUNT, SET_IPA_LINK,
-                          SELECT_KEY_DURATION, RECEIVE_KEYS_LIST)
+                          SELECT_KEY_DURATION, RECEIVE_KEYS_LIST) # Correctly imported here
 
 # Set up logging
 logging.basicConfig(
@@ -80,7 +79,8 @@ def main() -> None:
         entry_points=[CallbackQueryHandler(add_custom_keys_start, pattern='^admin_add_custom_keys$')],
         states={
             SELECT_KEY_DURATION: [CallbackQueryHandler(select_key_duration, pattern='^add_keys_duration_')],
-            RECEIVE_KEYS_list: [MessageHandler(filters.TEXT & ~filters.COMMAND, receive_keys_list)],
+            # THIS IS THE CORRECTED LINE:
+            RECEIVE_KEYS_LIST: [MessageHandler(filters.TEXT & ~filters.COMMAND, receive_keys_list)],
         },
         fallbacks=[CallbackQueryHandler(cancel_bulk_add, pattern='^cancel_bulk_add$')],
     )
@@ -102,8 +102,6 @@ def main() -> None:
     application.add_handler(CallbackQueryHandler(dashboard_callback, pattern='^back_to_dashboard$'))
     application.add_handler(CallbackQueryHandler(add_balance_callback, pattern='^add_balance$'))
     application.add_handler(CallbackQueryHandler(download_ipa_callback, pattern='^download_ipa$'))
-    
-    # --- REMOVED HANDLERS FOR BUYING KEYS ---
 
     # --- Callback Query Handlers (Admin) ---
     application.add_handler(CallbackQueryHandler(admin_panel_callback, pattern='^admin_panel$'))

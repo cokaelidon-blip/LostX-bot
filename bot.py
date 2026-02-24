@@ -7,11 +7,9 @@ from telegram.ext import (Application, CommandHandler, ConversationHandler,
 from database import init_database
 
 # Import handlers from their respective files
-from handlers.common import (start, login_start, login_username, login_password, 
-                           cancel_login, logout_callback, unknown_command,
-                           USERNAME, PASSWORD)
-from handlers.user import * # Import all user-facing handlers
-from handlers.admin import * # Import all admin-facing handlers
+from handlers.common import *
+from handlers.user import *
+from handlers.admin import *
 
 # --- Logging Setup ---
 logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
@@ -22,12 +20,9 @@ def main() -> None:
     # Initialize the database first
     init_database()
     
-    # Create the Application and pass it your bot's token.
     application = Application.builder().token(config.BOT_TOKEN).build()
 
     # --- Conversation Handlers ---
-    
-    # Login conversation
     login_conv = ConversationHandler(
         entry_points=[CallbackQueryHandler(login_start, pattern='^login$')],
         states={
@@ -38,7 +33,6 @@ def main() -> None:
         per_message=False
     )
     
-    # Admin: Create User conversation
     create_user_conv = ConversationHandler(
         entry_points=[CallbackQueryHandler(admin_create_user_start, pattern='^admin_create_user$')],
         states={
@@ -49,7 +43,6 @@ def main() -> None:
         per_message=False
     )
 
-    # Admin: Add Balance conversation
     add_balance_conv = ConversationHandler(
         entry_points=[CallbackQueryHandler(admin_add_balance_start, pattern='^admin_add_balance$')],
         states={
@@ -60,7 +53,6 @@ def main() -> None:
         per_message=False
     )
     
-    # Admin: Set IPA Link conversation
     set_link_conv = ConversationHandler(
         entry_points=[CallbackQueryHandler(admin_set_ipa_link_start, pattern='^admin_set_ipa_link$')],
         states={A_GET_LINK: [MessageHandler(filters.TEXT & ~filters.COMMAND, admin_receive_ipa_link)]},
@@ -68,7 +60,6 @@ def main() -> None:
         per_message=False
     )
 
-    # Admin: Add Keys conversation
     add_keys_conv = ConversationHandler(
         entry_points=[CallbackQueryHandler(admin_add_keys_start, pattern='^admin_add_keys$')],
         states={
@@ -79,7 +70,6 @@ def main() -> None:
         per_message=False
     )
 
-    # Admin: Remove User conversation
     remove_user_conv = ConversationHandler(
         entry_points=[CallbackQueryHandler(admin_remove_user_start, pattern='^admin_remove_user$')],
         states={A_GET_USERNAME_REMOVE: [MessageHandler(filters.TEXT & ~filters.COMMAND, admin_confirm_remove_user)]},
@@ -87,7 +77,7 @@ def main() -> None:
         per_message=False
     )
 
-    # --- Add all handlers to the application ---
+    # --- Add all handlers ---
     application.add_handler(CommandHandler("start", start))
     application.add_handler(login_conv)
     application.add_handler(create_user_conv)
@@ -96,20 +86,19 @@ def main() -> None:
     application.add_handler(add_keys_conv)
     application.add_handler(remove_user_conv)
 
-    # --- Regular Callback Handlers ---
-    # THIS IS THE FIX: Using the correct function name 'back_to_dashboard_callback'
+    # Common callbacks
     application.add_handler(CallbackQueryHandler(back_to_dashboard_callback, pattern='^back_to_dashboard$'))
     application.add_handler(CallbackQueryHandler(logout_callback, pattern='^logout$'))
 
-    # User-facing menu callbacks
+    # User menu callbacks
     application.add_handler(CallbackQueryHandler(modder_ipa_menu_callback, pattern='^modder_ipa_menu$'))
     application.add_handler(CallbackQueryHandler(download_ipa_callback, pattern='^download_ipa$'))
     application.add_handler(CallbackQueryHandler(check_balance_callback, pattern='^check_balance$'))
     application.add_handler(CallbackQueryHandler(history_callback, pattern='^history$'))
     
-    # Purchase flow callbacks
+    # Purchase flow
     application.add_handler(CallbackQueryHandler(buy_key_menu_callback, pattern='^buy_key_menu$'))
-    application.add_handler(CallbackQueryHandler(buy_key_callback, pattern='^buy_')) # Matches buy_plan_1, etc.
+    application.add_handler(CallbackQueryHandler(buy_key_callback, pattern='^buy_'))
 
     # Admin panel navigation
     application.add_handler(CallbackQueryHandler(admin_panel_callback, pattern='^admin_panel$'))
@@ -118,10 +107,9 @@ def main() -> None:
     application.add_handler(CallbackQueryHandler(admin_stats_callback, pattern='^admin_stats$'))
     application.add_handler(CallbackQueryHandler(view_stock_callback, pattern='^view_stock$'))
 
-    # Fallback for unknown commands
+    # Fallback
     application.add_handler(MessageHandler(filters.COMMAND, unknown_command))
 
-    # Run the bot until the user presses Ctrl-C
     print("Starting Modder IPA Bot...")
     application.run_polling()
 

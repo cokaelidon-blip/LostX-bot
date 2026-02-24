@@ -16,8 +16,9 @@ ADMIN_USERNAME = os.getenv('ADMIN_USERNAME')
 ADMIN_PASSWORD = os.getenv('ADMIN_PASSWORD')
 
 # --- Database Configuration ---
-# THE FIX: We are now using the /tmp/ directory, which is almost always writable.
-DATABASE_URL = os.getenv('DATABASE_URL', '/tmp/bot_database.db')
+# THE FINAL FIX: We are HARDCODING the path to the SQLite file.
+# This forces the bot to IGNORE the postgresql DATABASE_URL from the environment.
+DATABASE_URL = '/tmp/bot_database.db'
 
 # --- Pricing Configuration ---
 # All prices are in USD

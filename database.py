@@ -222,3 +222,16 @@ def get_statistics():
     total_revenue = _execute('SELECT SUM(amount) as sum FROM purchases;', fetch="one")['sum']
     stats['total_revenue'] = total_revenue if total_revenue else 0
     return stats
+
+def get_all_users_paged(page=1, per_page=20):
+    """Retrieves a paginated list of all users from the database."""
+    conn = get_db_connection()
+    try:
+        users = conn.execute(
+            'SELECT id, username, balance, is_active, is_admin FROM users ORDER BY id LIMIT ? OFFSET ?',
+            (per_page, (page - 1) * per_page)
+        ).fetchall()
+        return [dict(user) for user in users]
+    finally:
+        conn.close()
+

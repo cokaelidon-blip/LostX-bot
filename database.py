@@ -2,7 +2,6 @@
 import sqlite3
 import uuid
 import logging
-from contextlib import contextmanager
 from datetime import datetime, timedelta
 import bcrypt
 
@@ -13,7 +12,7 @@ SESSION_LIFETIME_HOURS = 24
 
 def get_db_connection():
     """Creates and returns a database connection."""
-    conn = sqlite3.connect(DATABASE_FILE)
+    conn = sqlite3.connect(DATABASE_FILE, check_same_thread=False)
     conn.row_factory = sqlite3.Row
     return conn
 
@@ -66,7 +65,7 @@ def init_database():
             )
         ''')
         
-        # Pricing Table (as discussed, managed by config.py but good to have a reference)
+        # Pricing Table - used for stats calculation
         c.execute('''
             CREATE TABLE IF NOT EXISTS pricing (
                 days INTEGER PRIMARY KEY,
@@ -132,17 +131,14 @@ def check_session(user_id):
         session = conn.execute('SELECT * FROM sessions WHERE user_id = ?', (user_id,)).fetchone()
         
         if session:
-            # Session exists, return it
             token = session['session_token']
         else:
-            # No valid session, create a new one
             token = str(uuid.uuid4())
             expiry = datetime.now() + timedelta(hours=SESSION_LIFETIME_HOURS)
             conn.execute('INSERT INTO sessions (session_token, user_id, expiry_date) VALUES (?, ?, ?)',
                          (token, user_id, expiry))
             conn.commit()
         
-        # Attach user info to the session data
         user_info = conn.execute('SELECT id, username, balance, is_admin FROM users WHERE id = ?', (user_id,)).fetchone()
         if user_info:
             session_data = dict(user_info)
@@ -265,25 +261,20 @@ def get_bot_stats():
     """Retrieves various statistics for the admin panel."""
     conn = get_db_connection()
     try:
-        total_users = conn.execute('SELECT COUNT(id) FROM users').fetchone()[0]
-        active_users = conn.execute('SELECT COUNT(id) FROM users WHERE is_active = 1').fetchone()[0]
-        total_keys_sold = conn.execute('SELECT COUNT(id) FROM license_keys WHERE user_id IS NOT NULL').fetchone()[0]
-        keys_in_stock = conn.execute('SELECT COUNT(id) FROM license_keys WHERE user_id IS NULL').fetchone()[0]
+        total_users = conn.execute('SELECT COUNT(id) FROM users').fetchone()[0] or 0
+        active_users = conn.execute('SELECT COUNT(id) FROM users WHERE is_active = 1').fetchone()[0] or 0
+        total_keys_sold = conn.execute('SELECT COUNT(id) FROM license_keys WHERE user_id IS NOT NULL').fetchone()[0] or 0
+        keys_in_stock = conn.execute('SELECT COUNT(id) FROM license_keys WHERE user_id IS NULL').fetchone()[0] or 0
         
-        total_earnings_query = conn.execute("""
-            SELECT SUM(p.price) 
-            FROM license_keys lk
-            JOIN pricing p ON lk.duration_days = p.days
-            WHERE lk.user_id IS NOT NULL
-        """).fetchone()
+        total_earnings_query = conn.execute("SELECT SUM(price) FROM pricing WHERE days IN (SELECT duration_days FROM license_keys WHERE user_id IS NOT NULL)").fetchone()
         total_earnings = total_earnings_query[0] if total_earnings_query and total_earnings_query[0] is not None else 0.0
 
         return {
-            "total_users": total_users or 0,
-            "active_users": active_users or 0,
-            "total_keys_sold": total_keys_sold or 0,
+            "total_users": total_users,
+            "active_users": active_users,
+            "total_keys_sold": total_keys_sold,
             "total_earnings": total_earnings,
-            "keys_in_stock": keys_in_stock or 0,
+            "keys_in_stock": keys_in_stock,
         }
     finally:
         conn.close()
@@ -293,9 +284,8 @@ def bulk_add_keys(duration_days, keys):
     conn = get_db_connection()
     try:
         with conn:
-            c = conn.cursor()
             keys_to_add = [(key, duration_days) for key in keys]
-            c.executemany('INSERT INTO license_keys (key, duration_days) VALUES (?, ?)', keys_to_add)
+            conn.executemany('INSERT INTO license_keys (key, duration_days) VALUES (?, ?)', keys_to_add)
         return len(keys_to_add)
     except Exception as e:
         logging.error(f"Error in bulk_add_keys: {e}")

@@ -4,11 +4,11 @@ from telegram import Update
 from telegram.ext import ContextTypes, ConversationHandler
 from telegram.constants import ParseMode
 
-# --- THIS IS THE FIX ---
-# I have removed the broken 'get_main_keyboard' from this import list.
 from database import (check_session, create_session, clear_session,
                       get_user_by_username, hash_password, get_db_connection)
-from keyboards import (get_login_keyboard, get_dashboard_keyboard, 
+# --- THIS IS THE FIX ---
+# Correctly imports 'get_start_keyboard' instead of the non-existent ones.
+from keyboards import (get_start_keyboard, get_dashboard_keyboard, 
                        get_admin_panel_keyboard)
 
 # Conversation states
@@ -20,7 +20,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     session = check_session(user.id)
 
     if session:
-        # User is logged in
+        # User is logged in, show the appropriate dashboard
         if session.get('is_admin'):
             text = f"Welcome back, Admin {html.escape(session['username'])}!"
             keyboard = get_admin_panel_keyboard()
@@ -29,13 +29,13 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
             keyboard = get_dashboard_keyboard(session.get('is_admin', False))
         await update.message.reply_text(text, reply_markup=keyboard, parse_mode=ParseMode.HTML)
     else:
-        # User is not logged in
+        # User is not logged in, show the login prompt
         text = "Welcome to the Modder IPA Bot! Please log in to continue."
-        await update.message.reply_text(text, reply_markup=get_login_keyboard())
+        await update.message.reply_text(text, reply_markup=get_start_keyboard())
 
 # --- Login Conversation ---
 async def login_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    """Starts the login process."""
+    """Starts the login process after the 'Login' button is clicked."""
     query = update.callback_query
     await query.answer()
     await query.edit_message_text(text="Please enter your username:")
@@ -59,13 +59,9 @@ async def login_password(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     if user and user['password_hash'] == hash_password(password):
         create_session(update.effective_user.id, user)
         await update.message.reply_text("✅ Login successful!")
-        
-        # Now call the /start logic again to show the correct dashboard
-        await start(update, context)
-
+        await start(update, context) # Show the correct dashboard
     else:
         await update.message.reply_text("❌ Invalid username or password. Please try again or type /cancel.")
-        # Re-ask for username to restart the flow cleanly
         await update.message.reply_text("Please enter your username:")
         return USERNAME
 
@@ -76,19 +72,17 @@ async def cancel_login(update: Update, context: ContextTypes.DEFAULT_TYPE) -> in
     """Cancels and ends the login conversation."""
     context.user_data.clear()
     await update.message.reply_text("Login cancelled.")
-    await start(update, context) # Show the main menu
+    await start(update, context)
     return ConversationHandler.END
-
 
 # --- Logout ---
 async def logout_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Logs the user out by clearing their session."""
+    """Logs the user out and shows the initial login screen."""
     query = update.callback_query
     await query.answer("Logging you out...")
     clear_session(update.effective_user.id)
     text = "You have been successfully logged out."
-    await query.edit_message_text(text=text, reply_markup=get_login_keyboard())
-
+    await query.edit_message_text(text=text, reply_markup=get_start_keyboard())
 
 # --- Unknown Command ---
 async def unknown_command(update: Update, context: ContextTypes.DEFAULT_TYPE):

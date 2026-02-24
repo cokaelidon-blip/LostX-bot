@@ -81,9 +81,9 @@ def main() -> None:
     application.add_handler(CallbackQueryHandler(logout_callback, pattern='^logout$'))
     application.add_handler(CallbackQueryHandler(dashboard_callback, pattern='^back_to_dashboard$'))
     application.add_handler(CallbackQueryHandler(modder_ipa_menu_callback, pattern='^modder_ipa_menu$'))
-    application.add_githandler(CallbackQueryHandler(buy_key_callback, pattern='^buy_plan_'))
+    # --- TYPO CORRECTED HERE ---
+    application.add_handler(CallbackQueryHandler(buy_key_callback, pattern='^buy_plan_'))
     application.add_handler(CallbackQueryHandler(download_ipa_callback, pattern='^download_ipa$'))
-    # --- HANDLERS FOR NEW BUTTONS ---
     application.add_handler(CallbackQueryHandler(history_callback, pattern='^history$'))
     application.add_handler(CallbackQueryHandler(check_balance_callback, pattern='^check_balance$'))
 

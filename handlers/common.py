@@ -5,12 +5,11 @@ from telegram.ext import ContextTypes, ConversationHandler
 from telegram.constants import ParseMode
 
 # --- THIS IS THE FIX ---
-# I am adding get_db_connection and hash_password to the import list.
+# I have removed the broken 'get_main_keyboard' from this import list.
 from database import (check_session, create_session, clear_session,
                       get_user_by_username, hash_password, get_db_connection)
-
-from keyboards import (get_main_keyboard, get_login_keyboard,
-                       get_dashboard_keyboard, get_admin_panel_keyboard)
+from keyboards import (get_login_keyboard, get_dashboard_keyboard, 
+                       get_admin_panel_keyboard)
 
 # Conversation states
 USERNAME, PASSWORD = range(2)

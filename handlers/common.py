@@ -29,11 +29,12 @@ You are already logged in.
             reply_markup=get_dashboard_keyboard(session['is_admin']),
             parse_mode=ParseMode.HTML)
     else:
-        welcome_text = (
-            "👋 <b>Welcome to the Modder IPA Bot!</b>
-"
-            "Please log in to access your dashboard or register for a new account."
-        )
+        # User is not logged in, show the welcome message
+        welcome_text = """
+👋 <b>Welcome to the Modder IPA Bot!</b>
+
+Please log in to access your dashboard or register for a new account.
+        """
         await update.message.reply_text(welcome_text,
                                         reply_markup=get_start_keyboard(),
                                         parse_mode=ParseMode.HTML)
@@ -118,8 +119,11 @@ async def register_password(update: Update,
     success, result = create_user(username, password)
     if success:
         await update.message.reply_text(
-            "✅ <b>Registration Successful!</b>
-You can now log in using your new credentials.",
+            """
+✅ <b>Registration Successful!</b>
+
+You can now log in using your new credentials.
+            """,
             reply_markup=get_start_keyboard(),
             parse_mode=ParseMode.HTML)
     else:

@@ -4,10 +4,9 @@ from telegram import Update
 from telegram.ext import ContextTypes, ConversationHandler
 from telegram.constants import ParseMode
 
-from database import (check_session, authenticate_user, create_user, logout_user,
-                      promote_user_to_admin) # <-- promote_user_to_admin added
+from database import (check_session, authenticate_user, logout_user, promote_user_to_admin)
 from keyboards import get_start_keyboard, get_dashboard_keyboard
-from config import ADMIN_IDS # <-- ADMIN_IDS imported
+from config import ADMIN_IDS
 
 # States for login and register conversations
 USERNAME, PASSWORD = range(1, 3)
@@ -41,7 +40,7 @@ You are already logged in.
         welcome_text = """
 👋 <b>Welcome to the Modder IPA Bot!</b>
 
-Please log in to access your dashboard or register for a new account.
+Please log in to access your dashboard.
         """
         await update.message.reply_text(welcome_text,
                                         reply_markup=get_start_keyboard(),
@@ -103,45 +102,6 @@ async def cancel_login(update: Update,
                        context: ContextTypes.DEFAULT_TYPE) -> int:
     await update.message.reply_text('Action cancelled.',
                                     reply_markup=get_start_keyboard())
-    context.user_data.clear()
-    return ConversationHandler.END
-
-
-async def register_start(update: Update,
-                         context: ContextTypes.DEFAULT_TYPE) -> int:
-    query = update.callback_query
-    await query.answer()
-    await query.edit_message_text(text="📋 Please choose a username:")
-    return USERNAME
-
-
-async def register_username(update: Update,
-                            context: ContextTypes.DEFAULT_TYPE) -> int:
-    context.user_data['register_username'] = update.message.text
-    await update.message.reply_text("🔑 Please choose a strong password:")
-    return PASSWORD
-
-
-async def register_password(update: Update,
-                            context: ContextTypes.DEFAULT_TYPE) -> int:
-    username = context.user_data.get('register_username')
-    password = update.message.text
-    try: await update.message.delete()
-    except Exception: pass
-    success, result = create_user(username, password)
-    if success:
-        await update.message.reply_text(
-            """
-✅ <b>Registration Successful!</b>
-
-You can now log in using your new credentials.
-            """,
-            reply_markup=get_start_keyboard(),
-            parse_mode=ParseMode.HTML)
-    else:
-        await update.message.reply_text(f"❌ {html.escape(str(result))}",
-                                        reply_markup=get_start_keyboard(),
-                                        parse_mode=ParseMode.HTML)
     context.user_data.clear()
     return ConversationHandler.END
 

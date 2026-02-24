@@ -1,8 +1,8 @@
 # handlers/common.py
+import html
 from telegram import Update
 from telegram.ext import ContextTypes, ConversationHandler
 from telegram.constants import ParseMode
-from telegram.helpers import escape_html
 
 from database import check_session, authenticate_user, create_user, logout_user
 from keyboards import get_start_keyboard, get_dashboard_keyboard
@@ -16,7 +16,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     session = check_session(telegram_id)
 
     if session:
-        safe_username = escape_html(session['username'])
+        safe_username = html.escape(session['username'])
         dashboard_text = f"""
 🎮 <b>Welcome back, {safe_username}!</b>
 
@@ -29,7 +29,6 @@ You are already logged in.
             reply_markup=get_dashboard_keyboard(session['is_admin']),
             parse_mode=ParseMode.HTML)
     else:
-        # User is not logged in, show the welcome message
         welcome_text = """
 👋 <b>Welcome to the Modder IPA Bot!</b>
 
@@ -67,7 +66,7 @@ async def login_password(update: Update,
 
     if success:
         session = check_session(telegram_id)
-        safe_username = escape_html(session['username'])
+        safe_username = html.escape(session['username'])
         dashboard_text = f"""
 ✅ <b>Login Successful!</b>
 
@@ -80,7 +79,7 @@ Welcome, <b>{safe_username}</b>.
             reply_markup=get_dashboard_keyboard(session['is_admin']),
             parse_mode=ParseMode.HTML)
     else:
-        await update.message.reply_text(f"❌ {escape_html(result)}",
+        await update.message.reply_text(f"❌ {html.escape(str(result))}",
                                         reply_markup=get_start_keyboard(),
                                         parse_mode=ParseMode.HTML)
     context.user_data.clear()
@@ -127,7 +126,7 @@ You can now log in using your new credentials.
             reply_markup=get_start_keyboard(),
             parse_mode=ParseMode.HTML)
     else:
-        await update.message.reply_text(f"❌ {escape_html(result)}",
+        await update.message.reply_text(f"❌ {html.escape(str(result))}",
                                         reply_markup=get_start_keyboard(),
                                         parse_mode=ParseMode.HTML)
     context.user_data.clear()

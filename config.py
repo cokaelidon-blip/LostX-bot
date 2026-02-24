@@ -26,21 +26,21 @@ except (ValueError, TypeError):
 ADMIN_USERNAME = os.getenv('ADMIN_USERNAME')
 ADMIN_PASSWORD = os.getenv('ADMIN_PASSWORD')
 
-# --- Optional / Customizable Variables ---
-# Address for users to send USDT (TRC20) to
-USDT_ADDRESS = os.getenv('USDT_ADDRESS', 'YOUR_USDT_TRC20_ADDRESS_HERE')
+# --- Bot Settings ---
+# The username of the admin to contact for balance additions.
+ADMIN_CONTACT_USERNAME = "@lostSick"
 
 # Set to True to enable stock checking, False to allow unlimited purchases
 STOCK_MODE = os.getenv('STOCK_MODE', 'True').lower() in ('true', '1', 't')
 
-# --- Pricing Configuration ---
-# You can add or remove plans here
+# --- Pricing Configuration (NEW PRICES) ---
+# You can add or remove plans here.
 # The key (e.g., 'plan1') is used internally.
 # 'label' is what the user sees on the button.
 # 'days' is the duration of the key.
 # 'price' is the cost.
 PRICING = {
-    'plan1': {'label': '7 Days', 'days': 7, 'price': 5.00},
-    'plan2': {'label': '30 Days', 'days': 30, 'price': 15.00},
-    'plan3': {'label': '90 Days', 'days': 90, 'price': 30.00},
+    'plan1': {'label': '1 Day', 'days': 1, 'price': 2.00},
+    'plan2': {'label': '7 Days', 'days': 7, 'price': 5.00},
+    'plan3': {'label': '1 Month', 'days': 30, 'price': 8.00},
 }

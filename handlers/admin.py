@@ -5,7 +5,7 @@ from telegram import Update
 from telegram.ext import ContextTypes, ConversationHandler
 from telegram.constants import ParseMode
 
-from database import (get_all_users_paged, get_key_stock, get_bot_stats, # Corrected to match function
+from database import (get_all_users_paged, get_key_stock, get_bot_stats,
                       create_user, update_balance, get_user_by_username,
                       set_setting, bulk_add_keys,
                       toggle_user_active_status, reset_user_device_id)
@@ -32,7 +32,6 @@ async def admin_users_callback(update: Update, context: ContextTypes.DEFAULT_TYP
     query = update.callback_query
     await query.answer()
 
-    # Now correctly calls the function that exists
     users = get_all_users_paged()
     if not users:
         user_list_text = "No users found."
@@ -160,7 +159,7 @@ async def add_balance_amount(update: Update, context: ContextTypes.DEFAULT_TYPE)
 
 # --- User Commands (handled via /command <username>) ---
 async def toggle_user_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if update.effective_user.id not in context.bot_data.get('admin_ids', []):
+    if update.effective_user.id not in config.ADMIN_IDS:
         return
     try:
         username = context.args[0]
@@ -170,12 +169,13 @@ async def toggle_user_command(update: Update, context: ContextTypes.DEFAULT_TYPE
         await update.message.reply_text("Usage: /toggleuser <username>")
 
 async def reset_device_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if update.effective_user.id not in context.bot_data.get('admin_ids', []):
+    if update.effective_user.id not in config.ADMIN_IDS:
         return
     try:
         username = context.args[0]
         success, message = reset_user_device_id(username)
-        await update.message.reply_text(message.
+        # THIS IS THE LINE THAT WAS BROKEN. IT IS NOW FIXED.
+        await update.message.reply_text(message)
     except (IndexError, ValueError):
         await update.message.reply_text("Usage: /resetdevice <username>")
 

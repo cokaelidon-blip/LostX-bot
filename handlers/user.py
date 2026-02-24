@@ -1,13 +1,13 @@
 # handlers/user.py
+import html
+import psycopg2.extras
 from telegram import Update
 from telegram.ext import ContextTypes
-from telegram.helpers import escape_html
 from telegram.constants import ParseMode
-import psycopg2.extras # For dictionary cursor
 
 from database import (check_session, get_user_balance, get_available_key,
                       sell_key, update_balance, record_purchase,
-                      get_stock_count, get_setting, get_connection) # Added get_connection
+                      get_stock_count, get_setting, get_connection)
 from keyboards import (get_pricing_keyboard, get_confirm_purchase_keyboard,
                        get_back_keyboard, get_dashboard_keyboard,
                        get_modder_ipa_keyboard)
@@ -25,7 +25,7 @@ async def dashboard_callback(update: Update,
         await query.edit_message_text("❌ Session expired. Please login again.", reply_markup=get_start_keyboard())
         return
 
-    safe_username = escape_html(session['username'])
+    safe_username = html.escape(session['username'])
     dashboard_text = f"""
 🎮 <b>Modder IPA Dashboard</b>
 
@@ -48,8 +48,7 @@ async def modder_ipa_callback(update: Update,
         await query.edit_message_text("❌ Session expired. Please login again.", reply_markup=get_start_keyboard())
         return
 
-    await query.edit_message_text(text="<b>🔑 Modder IPA Menu</b>
-Select an option below.",
+    await query.edit_message_text(text="<b>🔑 Modder IPA Menu</b>\n\nSelect an option below.",
                                   reply_markup=get_modder_ipa_keyboard(),
                                   parse_mode=ParseMode.HTML)
 
@@ -98,23 +97,18 @@ async def buy_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await query.edit_message_text("Invalid plan selected.")
         return
 
-    safe_admin_username = escape_html(ADMIN_USERNAME)
-    safe_usdt_address = escape_html(USDT_ADDRESS)
+    safe_admin_username = html.escape(ADMIN_USERNAME)
+    safe_usdt_address = html.escape(USDT_ADDRESS)
 
     if STOCK_MODE:
         if not get_available_key(plan['days']):
-            await query.edit_message_text(f"❌ <b>Out of Stock</b>
-Sorry, {plan['label']} keys are currently out of stock.
-Please contact admin @{safe_admin_username} or try again later.",
+            await query.edit_message_text(f"❌ <b>Out of Stock</b>\n\nSorry, {plan['label']} keys are currently out of stock.\n\nPlease contact admin @{safe_admin_username} or try again later.",
                                           reply_markup=get_back_keyboard(),
                                           parse_mode=ParseMode.HTML)
             return
 
     if session['balance'] < plan['price']:
-        await query.edit_message_text(f"❌ <b>Insufficient Balance</b>
-Required: <b>${plan['price']:.2f}</b>\nYour Balance: <b>${session['balance']:.2f}</b>
-Please contact admin @{safe_admin_username} to add balance.
-💳 <b>USDT (TRC20) Address:</b>\n<code>{safe_usdt_address}</code>",
+        await query.edit_message_text(f"❌ <b>Insufficient Balance</b>\n\nRequired: <b>${plan['price']:.2f}</b>\nYour Balance: <b>${session['balance']:.2f}</b>\n\nPlease contact admin @{safe_admin_username} to add balance.\n\n💳 <b>USDT (TRC20) Address:</b>\n<code>{safe_usdt_address}</code>",
                                       reply_markup=get_back_keyboard(),
                                       parse_mode=ParseMode.HTML)
         return
@@ -123,7 +117,7 @@ Please contact admin @{safe_admin_username} to add balance.
 🛒 <b>Confirm Purchase</b>
 
 📦 Product: <b>Modder IPA Key</b>
-📅 Duration: <b>{escape_html(plan['label'])}</b>
+📅 Duration: <b>{html.escape(plan['label'])}</b>
 💰 Price: <b>${plan['price']:.2f}</b>
 
 Your Balance: <b>${session['balance']:.2f}</b>
@@ -171,7 +165,7 @@ async def confirm_purchase_callback(update: Update,
 
     update_balance(session['user_id'], -plan['price'], 'purchase', f"Purchased {plan['days']} day key")
     record_purchase(session['user_id'], key_id, plan['price'], plan['days'])
-    safe_key_value = escape_html(key_value)
+    safe_key_value = html.escape(key_value)
 
     success_text = f"""
 ✅ <b>Purchase Successful!</b>
@@ -179,7 +173,7 @@ async def confirm_purchase_callback(update: Update,
 🔑 <b>Your Key:</b>
 <code>{safe_key_value}</code>
 
-📅 Duration: <b>{escape_html(plan['label'])}</b>
+📅 Duration: <b>{html.escape(plan['label'])}</b>
 💰 Amount Paid: <b>${plan['price']:.2f}</b>
 
 ⚠️ <b>Important:</b> Save this key! It won't be shown again.
@@ -200,8 +194,8 @@ async def balance_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await query.edit_message_text("❌ Session expired. Please login again.", reply_markup=get_start_keyboard())
         return
 
-    safe_admin_username = escape_html(ADMIN_USERNAME)
-    safe_usdt_address = escape_html(USDT_ADDRESS)
+    safe_admin_username = html.escape(ADMIN_USERNAME)
+    safe_usdt_address = html.escape(USDT_ADDRESS)
 
     text = f"""
 💰 <b>Your Balance</b>
@@ -237,16 +231,14 @@ async def history_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     conn.close()
 
     if not purchases:
-        text = "📜 <b>Purchase History</b>
-No purchases yet."
+        text = "📜 <b>Purchase History</b>\n\nNo purchases yet."
     else:
-        text = "📜 <b>Purchase History (Last 10)</b>
-"
+        text = "📜 <b>Purchase History (Last 10)</b>\n\n"
         for i, purchase in enumerate(purchases, 1):
             amount = purchase['amount']
             days = purchase['duration_days']
             date = purchase['purchased_at']
-            text += f"{i}. {days} days - ${amount:.2f} - {escape_html(str(date)[:10])}\n"
+            text += f"{i}. {days} days - ${amount:.2f} - {html.escape(str(date)[:10])}\n"
 
     await query.edit_message_text(text,
                                   reply_markup=get_back_keyboard(),
@@ -263,9 +255,8 @@ async def ipa_link_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     ipa_link = get_setting('ipa_link')
     if ipa_link:
-        safe_ipa_link = escape_html(ipa_link)
-        text = f"🔗 <b>Here is the latest IPA link:</b>
-<code>{safe_ipa_link}</code>"
+        safe_ipa_link = html.escape(ipa_link)
+        text = f"🔗 <b>Here is the latest IPA link:</b>\n\n<code>{safe_ipa_link}</code>"
     else:
         text = "❌ The IPA link has not been set by the admin yet. Please check back later."
     await context.bot.send_message(chat_id=update.effective_chat.id,

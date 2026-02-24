@@ -1,5 +1,29 @@
 # bot.py
 import logging
+import os
+import sys
+
+# --- START DIAGNOSTIC BLOCK ---
+# This block will run first to get information about the container's environment.
+print("--- STARTING DIAGNOSTIC CHECK ---", file=sys.stderr)
+try:
+    print(f"Current User ID (UID): {os.getuid()}", file=sys.stderr)
+    print(f"Current Group ID (GID): {os.getgid()}", file=sys.stderr)
+    print(f"Current Working Directory: {os.getcwd()}", file=sys.stderr)
+    print(f"DATABASE_URL is set to: {os.getenv('DATABASE_URL', 'Not Set, using default')}", file=sys.stderr)
+    
+    print("\n--- Checking /app directory permissions ---", file=sys.stderr)
+    os.system('ls -ld /app >&2')
+
+    print("\n--- Checking /tmp directory permissions ---", file=sys.stderr)
+    os.system('ls -ld /tmp >&2')
+
+except Exception as e:
+    print(f"An error occurred during diagnostics: {e}", file=sys.stderr)
+print("\n--- END OF DIAGNOSTIC CHECK ---\n", file=sys.stderr)
+# --- END DIAGNOSTIC BLOCK ---
+
+
 from telegram.ext import (Application, CommandHandler, CallbackQueryHandler,
                           ConversationHandler, MessageHandler, filters)
 
@@ -64,7 +88,6 @@ def main() -> None:
         conversation_timeout=60
     )
 
-    # ADD KEYS CONVERSATION (FIXED STRUCTURE)
     add_keys_conv = ConversationHandler(
         entry_points=[CallbackQueryHandler(admin_add_keys_start, pattern='^admin_add_keys$')],
         states={
@@ -72,10 +95,9 @@ def main() -> None:
             RECEIVE_KEYS_LIST: [MessageHandler(filters.TEXT & ~filters.COMMAND, receive_keys_list)],
         },
         fallbacks=[cancel_handler],
-        conversation_timeout=120 # Longer timeout for pasting keys
+        conversation_timeout=120 
     )
 
-    # REMOVE USER CONVERSATION (NEW)
     remove_user_conv = ConversationHandler(
         entry_points=[CallbackQueryHandler(admin_remove_user_start, pattern='^admin_remove_user$')],
         states={
@@ -94,7 +116,7 @@ def main() -> None:
     application.add_handler(add_balance_conv)
     application.add_handler(set_link_conv)
     application.add_handler(add_keys_conv)
-    application.add_handler(remove_user_conv) # <-- Add new conversation
+    application.add_handler(remove_user_conv)
     
     # User Callbacks
     application.add_handler(CallbackQueryHandler(logout_callback, pattern='^logout$'))

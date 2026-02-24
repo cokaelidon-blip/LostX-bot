@@ -197,4 +197,77 @@ async def balance_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     session = check_session(update.effective_user.id)
     if not session:
         from keyboards import get_start_keyboard
-        await query.edit_message_text("❌ Session
+        await query.edit_message_text("❌ Session expired. Please login again.", reply_markup=get_start_keyboard())
+        return
+
+    safe_admin_username = escape_html(ADMIN_USERNAME)
+    safe_usdt_address = escape_html(USDT_ADDRESS)
+
+    text = f"""
+💰 <b>Your Balance</b>
+
+Current Balance: <b>${session['balance']:.2f}</b>
+
+To add funds, contact admin @{safe_admin_username}
+
+💳 <b>USDT (TRC20) Address:</b>
+<code>{safe_usdt_address}</code>
+
+Send the amount and transaction proof to admin.
+    """
+    await query.edit_message_text(text,
+                                  reply_markup=get_back_keyboard(),
+                                  parse_mode=ParseMode.HTML)
+
+
+async def history_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    session = check_session(update.effective_user.id)
+    if not session:
+        from keyboards import get_start_keyboard
+        await query.edit_message_text("❌ Session expired. Please login again.", reply_markup=get_start_keyboard())
+        return
+
+    conn = get_connection()
+    cursor = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
+    cursor.execute('SELECT amount, duration_days, purchased_at FROM purchases WHERE user_id = %s ORDER BY purchased_at DESC LIMIT 10', (session['user_id'],))
+    purchases = cursor.fetchall()
+    cursor.close()
+    conn.close()
+
+    if not purchases:
+        text = "📜 <b>Purchase History</b>
+No purchases yet."
+    else:
+        text = "📜 <b>Purchase History (Last 10)</b>
+"
+        for i, purchase in enumerate(purchases, 1):
+            amount = purchase['amount']
+            days = purchase['duration_days']
+            date = purchase['purchased_at']
+            text += f"{i}. {days} days - ${amount:.2f} - {escape_html(str(date)[:10])}\n"
+
+    await query.edit_message_text(text,
+                                  reply_markup=get_back_keyboard(),
+                                  parse_mode=ParseMode.HTML)
+
+
+async def ipa_link_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    if not check_session(update.effective_user.id):
+        from keyboards import get_start_keyboard
+        await query.edit_message_text("❌ Session expired. Please login again.", reply_markup=get_start_keyboard())
+        return
+
+    ipa_link = get_setting('ipa_link')
+    if ipa_link:
+        safe_ipa_link = escape_html(ipa_link)
+        text = f"🔗 <b>Here is the latest IPA link:</b>
+<code>{safe_ipa_link}</code>"
+    else:
+        text = "❌ The IPA link has not been set by the admin yet. Please check back later."
+    await context.bot.send_message(chat_id=update.effective_chat.id,
+                                   text=text,
+                                   parse_mode=ParseMode.HTML)

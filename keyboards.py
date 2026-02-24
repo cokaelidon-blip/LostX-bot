@@ -2,138 +2,78 @@
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 from config import PRICING
 
-# Main Menu Keyboards
-
-
 def get_start_keyboard():
-    keyboard = [[
-        InlineKeyboardButton("➡️ Login", callback_data="login"),
-        InlineKeyboardButton("📋 Register", callback_data="register")
-    ]]
+    """Returns the keyboard for the start message when the user is not logged in."""
+    keyboard = [[InlineKeyboardButton("🔐 Login", callback_data='login')]]
     return InlineKeyboardMarkup(keyboard)
-
 
 def get_dashboard_keyboard(is_admin=False):
+    """Returns the main dashboard keyboard."""
     keyboard = [
-        [InlineKeyboardButton("🔑 Modder IPA", callback_data="modder_ipa")],
+        [InlineKeyboardButton("📱 Modder IPA", callback_data='modder_ipa')],
         [
-            InlineKeyboardButton("💰 Balance", callback_data="balance"),
-            InlineKeyboardButton("📜 History", callback_data="history")
-        ], [InlineKeyboardButton("🚪 Logout", callback_data="logout")]
+            InlineKeyboardButton("💰 Balance", callback_data='balance'),
+            InlineKeyboardButton("🛒 Buy Access", callback_data='buy_menu')
+        ],
+        [InlineKeyboardButton("📜 History", callback_data='history')],
+        [InlineKeyboardButton("🔗 Get IPA Link", callback_data='ipa_link')],
     ]
     if is_admin:
-        keyboard.append([
-            InlineKeyboardButton("⚙️ Admin Panel", callback_data="admin_panel")
-        ])
+        keyboard.append([InlineKeyboardButton("👑 Admin Panel", callback_data='admin_panel')])
+    keyboard.append([InlineKeyboardButton("🚪 Logout", callback_data='logout')])
     return InlineKeyboardMarkup(keyboard)
 
-
-def get_back_keyboard():
+def get_buy_menu_keyboard():
+    """Returns the keyboard for the buy menu."""
     keyboard = [[
-        InlineKeyboardButton("⬅️ Back to Dashboard",
-                             callback_data="dashboard")
-    ]]
+        InlineKeyboardButton(data["label"], callback_data=f"buy_{key}")
+    ] for key, data in PRICING.items()]
+    keyboard.append([InlineKeyboardButton("⬅️ Back to Dashboard", callback_data='dashboard')])
     return InlineKeyboardMarkup(keyboard)
 
-
-def get_cancel_keyboard():
-    keyboard = [[InlineKeyboardButton("❌ Cancel", callback_data="cancel")]]
-    return InlineKeyboardMarkup(keyboard)
-
-
-# User Flow Keyboards
-
-
-def get_modder_ipa_keyboard():
+def get_confirmation_keyboard(plan_key):
+    """Returns a confirmation keyboard for a purchase."""
     keyboard = [
-        [InlineKeyboardButton("🛒 Buy Key", callback_data="buy_menu")],
-        [InlineKeyboardButton("🔗 Get IPA Link", callback_data="ipa_link")],
-        [
-            InlineKeyboardButton("⬅️ Back to Dashboard",
-                                 callback_data="dashboard")
-        ]
+        [InlineKeyboardButton("✅ Yes, I'm sure", callback_data=f"confirm_{plan_key}")],
+        [InlineKeyboardButton("❌ Cancel", callback_data='buy_menu')]
     ]
     return InlineKeyboardMarkup(keyboard)
 
+def get_back_to_dashboard_keyboard():
+    """Returns a simple 'Back to Dashboard' keyboard."""
+    return InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ Back to Dashboard", callback_data='dashboard')]])
 
-def get_pricing_keyboard():
+def get_admin_panel_keyboard():
+    """Returns the main admin panel keyboard."""
     keyboard = [
-        [
-            InlineKeyboardButton(PRICING["1_day"]["label"],
-                                 callback_data="buy_1_day")
-        ],
-        [
-            InlineKeyboardButton(PRICING["7_days"]["label"],
-                                 callback_data="buy_7_days")
-        ],
-        [
-            InlineKeyboardButton(PRICING["1_month"]["label"],
-                                 callback_data="buy_1_month")
-        ],
-        [
-            InlineKeyboardButton("⬅️ Back to Dashboard",
-                                 callback_data="dashboard")
-        ]
+        [InlineKeyboardButton("👥 Users", callback_data='admin_users'), InlineKeyboardButton("🔑 Keys", callback_data='admin_keys')],
+        [InlineKeyboardButton("📊 Statistics", callback_data='admin_stats'), InlineKeyboardButton("📈 View Stock", callback_data='view_stock')],
+        [InlineKeyboardButton("⬅️ Back to Dashboard", callback_data='dashboard')]
     ]
     return InlineKeyboardMarkup(keyboard)
 
+def get_admin_users_keyboard():
+    """Returns the keyboard for the admin users section."""
+    keyboard = [
+        [InlineKeyboardButton("➕ Create User", callback_data='admin_create_user')],
+        [InlineKeyboardButton("💰 Add Balance", callback_data='admin_add_balance')],
+        [InlineKeyboardButton("⬅️ Back to Admin Panel", callback_data='admin_panel')]
+    ]
+    return InlineKeyboardMarkup(keyboard)
 
-def get_confirm_purchase_keyboard(plan_key):
+def get_admin_keys_keyboard():
+    """Returns the keyboard for the admin keys section."""
+    keyboard = [
+        [InlineKeyboardButton("➕ Add Custom Keys", callback_data='add_custom_keys_start')],
+        [InlineKeyboardButton("🔗 Set IPA Link", callback_data='admin_set_link')],
+        [InlineKeyboardButton("⬅️ Back to Admin Panel", callback_data='admin_panel')]
+    ]
+    return InlineKeyboardMarkup(keyboard)
+    
+def get_key_duration_keyboard():
+    """Returns keyboard for selecting key duration."""
     keyboard = [[
-        InlineKeyboardButton("✅ Confirm", callback_data=f"confirm_{plan_key}"),
-        InlineKeyboardButton("❌ Cancel", callback_data="modder_ipa")
-    ]]
-    return InlineKeyboardMarkup(keyboard)
-
-
-# Admin Keyboards
-
-
-def get_admin_keyboard():
-    keyboard = [
-        [
-            InlineKeyboardButton("👥 Users", callback_data="admin_users"),
-            InlineKeyboardButton("🔑 Keys Stock", callback_data="admin_keys")
-        ],
-        [
-            InlineKeyboardButton("➕ Create User",
-                                 callback_data="admin_create_user"),
-            InlineKeyboardButton("💵 Add Balance",
-                                 callback_data="admin_add_balance")
-        ],
-        [
-            InlineKeyboardButton("📊 Statistics", callback_data="admin_stats"),
-            InlineKeyboardButton("🔗 Set IPA Link",
-                                 callback_data="admin_set_link")
-        ], [InlineKeyboardButton("⬅️ Back", callback_data="dashboard")]
-    ]
-    return InlineKeyboardMarkup(keyboard)
-
-
-def get_keys_management_keyboard():
-    """
-    MODIFIED: Replaced individual key add buttons with a single "Add Custom Keys" button.
-    """
-    keyboard = [
-        [
-            InlineKeyboardButton("➕ Add Custom Keys",
-                                 callback_data="add_custom_keys_start")
-        ],
-        [InlineKeyboardButton("📦 View Stock", callback_data="view_stock")],
-        [InlineKeyboardButton("⬅️ Back to Admin", callback_data="admin_panel")]
-    ]
-    return InlineKeyboardMarkup(keyboard)
-
-
-def get_duration_selection_keyboard():
-    """
-    NEW: Keyboard to ask admin which duration the bulk keys are for.
-    """
-    keyboard = [
-        [
-            InlineKeyboardButton("1 Day", callback_data="duration_select_1"),
-            InlineKeyboardButton("7 Days", callback_data="duration_select_7"),
-            InlineKeyboardButton("30 Days", callback_data="duration_select_30")
-        ], [InlineKeyboardButton("❌ Cancel", callback_data="cancel_bulk_add")]
-    ]
+        InlineKeyboardButton(data["label"], callback_data=f"duration_select_{data['days']}")
+    ] for _, data in PRICING.items()]
+    keyboard.append([InlineKeyboardButton("❌ Cancel", callback_data='cancel_bulk_add')])
     return InlineKeyboardMarkup(keyboard)

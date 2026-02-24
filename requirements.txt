@@ -3,4 +3,4 @@ httpx
 httpx
 python-telegram-bot==22.6
 telegram
-Flask==3.0
+psycopg2-binary

@@ -4,12 +4,11 @@ from telegram import Update
 from telegram.ext import ContextTypes
 from telegram.constants import ParseMode
 
+# --- CHANGE 1: Import 'get_key_stock' ---
 from database import (check_session, get_user_by_telegram_id, 
                       get_user_purchase_history, get_setting, 
-                      find_available_key, assign_key_to_user, update_balance)
+                      find_available_key, assign_key_to_user, update_balance, get_key_stock)
 
-# --- THIS IS THE FIX ---
-# I have replaced the old, incorrect keyboard names with the new, correct ones.
 from keyboards import (get_dashboard_keyboard, get_ipa_menu_keyboard,
                        get_buy_key_keyboard)
                        
@@ -80,12 +79,33 @@ async def history_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 # --- Purchase Flow ---
 
+# --- CHANGE 2: Replace this entire function ---
 async def buy_key_menu_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Shows the menu for buying different key durations."""
+    """Shows the menu for buying different key durations, including stock info."""
     query = update.callback_query
     await query.answer()
-    text = "🛒 *Buy Access Key*\n\nSelect a plan to purchase. The cost will be deducted from your balance."
-    await query.edit_message_text(text, reply_markup=get_buy_key_keyboard(), parse_mode=ParseMode.MARKDOWN)
+
+    # Get key stock from the database and create a map for easy lookup
+    stock_data = get_key_stock()
+    stock_map = {item['duration_days']: item['count'] for item in stock_data}
+
+    # Format the stock text, using .get(duration, 0) to handle cases where a key type is out of stock
+    stock_text = (
+        f"📦 *Current Stock*\n"
+        f"1-Day Keys: {stock_map.get(1, 0)}\n"
+        f"7-Day Keys: {stock_map.get(7, 0)}\n"
+        f"30-Day Keys: {stock_map.get(30, 0)}\n\n"
+    )
+
+    # Combine stock text with the main message
+    main_text = "🛒 *Buy Key*\n\nSelect a plan to purchase. The cost will be deducted from your balance."
+    full_text = stock_text + main_text
+    
+    await query.edit_message_text(
+        text=full_text, 
+        reply_markup=get_buy_key_keyboard(), 
+        parse_mode=ParseMode.MARKDOWN
+    )
 
 async def buy_key_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handles the actual key purchase logic."""
@@ -107,7 +127,8 @@ async def buy_key_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     user_db = get_user_by_telegram_id(update.effective_user.id)
     if not user_db or user_db['balance'] < price:
-        await query.answer(f"Insufficient balance. You need ${price:.2f}, but you only have ${user_db['balance']:.2f}.", show_alert=True)
+        current_balance = user_db['balance'] if user_db else 0.0
+        await query.answer(f"Insufficient balance. You need ${price:.2f}, but you only have ${current_balance:.2f}.", show_alert=True)
         return
 
     key_data = find_available_key(duration)
@@ -121,7 +142,6 @@ async def buy_key_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         update_balance(user_db['id'], price, 'debit')
         assign_key_to_user(key_data['id'], user_db['id'])
         
-        # Send the key to the user
         success_text = (
             f"✅ *Purchase Successful!*\n\n"
             f"Your new {duration}-day access key is:\n\n"
@@ -129,11 +149,9 @@ async def buy_key_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             f"${price:.2f} has been deducted from your balance."
         )
         await query.message.reply_text(success_text, parse_mode=ParseMode.MARKDOWN)
-        # Go back to the IPA menu
         await query.edit_message_text("📱 *Modder IPA Menu*\n\nSelect an option below.", reply_markup=get_ipa_menu_keyboard(), parse_mode=ParseMode.MARKDOWN)
 
     except Exception as e:
-        # In a real scenario, you'd log this error
         await query.message.reply_text("An unexpected error occurred. Please try again or contact support.")
         # Refund the user if the transaction failed after debiting
         update_balance(user_db['id'], price, 'credit')

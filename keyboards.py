@@ -12,22 +12,20 @@ def get_main_dashboard_keyboard(is_admin=False):
     keyboard = [
         [InlineKeyboardButton("📱 Modder IPA", callback_data='modder_ipa_menu')],
         [
-            InlineKeyboardButton("📜 History", callback_data='history'),
+            # History will be implemented next
+            # InlineKeyboardButton("📜 History", callback_data='history'),
             InlineKeyboardButton("🔒 Logout", callback_data='logout')
         ]
     ]
     if is_admin:
-        # Add the Admin Panel button for admins
         keyboard.insert(1, [InlineKeyboardButton("👑 Admin Panel", callback_data='admin_panel')])
     return InlineKeyboardMarkup(keyboard)
 
 def get_modder_ipa_keyboard():
-    """Returns the keyboard for the 'Modder IPA' menu, including buy options."""
+    """Returns the keyboard for the 'Modder IPA' menu."""
     keyboard = []
-    # Create a button for each plan in the PRICING config
     for plan_key, plan_details in PRICING.items():
         text = f"Buy {plan_details['label']} - ${plan_details['price']:.2f}"
-        # The callback_data will be e.g., 'buy_plan_plan1'
         keyboard.append([InlineKeyboardButton(text, callback_data=f'buy_plan_{plan_key}')])
     
     keyboard.append([InlineKeyboardButton("⬇️ Download IPA", callback_data='download_ipa')])
@@ -39,8 +37,10 @@ def get_back_to_dashboard_keyboard():
     keyboard = [[InlineKeyboardButton("« Back to Dashboard", callback_data='back_to_dashboard')]]
     return InlineKeyboardMarkup(keyboard)
 
-# --- Admin Keyboards (Unchanged for now, but keeping for future steps) ---
+# --- Admin Keyboards (RESTORED) ---
+
 def get_admin_panel_keyboard():
+    """Returns the main admin panel keyboard."""
     keyboard = [
         [
             InlineKeyboardButton("👥 Users", callback_data='admin_users'),
@@ -52,4 +52,40 @@ def get_admin_panel_keyboard():
         ],
         [InlineKeyboardButton("« Back to Dashboard", callback_data='back_to_dashboard')]
     ]
+    return InlineKeyboardMarkup(keyboard)
+
+def get_admin_users_keyboard():
+    """Returns the keyboard for the user management section."""
+    keyboard = [
+        [
+            InlineKeyboardButton("➕ Create User", callback_data='admin_create_user'),
+            InlineKeyboardButton("💰 Add Balance", callback_data='admin_add_balance')
+        ],
+        [InlineKeyboardButton("« Back to Admin Panel", callback_data='admin_panel')]
+    ]
+    return InlineKeyboardMarkup(keyboard)
+
+def get_admin_keys_keyboard():
+    """Returns the keyboard for the key management section."""
+    keyboard = [
+        [
+            InlineKeyboardButton("📦 View Stock", callback_data='view_stock'),
+            InlineKeyboardButton("➕ Add Keys", callback_data='admin_add_keys')
+        ],
+        [InlineKeyboardButton("« Back to Admin Panel", callback_data='admin_panel')]
+    ]
+    return InlineKeyboardMarkup(keyboard)
+
+def get_bulk_add_duration_keyboard():
+    """Returns a keyboard for selecting key duration during bulk add."""
+    keyboard = []
+    for key, plan in PRICING.items():
+        text = f"Add for: {plan['label']}"
+        keyboard.append([InlineKeyboardButton(text, callback_data=f'add_keys_duration_{plan["days"]}')])
+    keyboard.append([InlineKeyboardButton("« Cancel", callback_data='cancel_admin_action')])
+    return InlineKeyboardMarkup(keyboard)
+
+def get_cancel_admin_action_keyboard():
+    """Returns a simple cancel button for admin conversations."""
+    keyboard = [[InlineKeyboardButton("❌ Cancel", callback_data='cancel_admin_action')]]
     return InlineKeyboardMarkup(keyboard)

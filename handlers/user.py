@@ -5,7 +5,8 @@ from telegram.ext import ContextTypes
 from telegram.constants import ParseMode
 
 from database import (check_session, get_user_by_telegram_id, get_setting, find_available_key,
-                      assign_key_to_user, update_balance, get_user_purchase_history) # <-- Added get_user_purchase_history
+                      assign_key_to_user, update_balance, get_user_purchase_history,
+                      get_key_stock) # <-- Added get_key_stock
 from keyboards import (get_main_dashboard_keyboard, get_modder_ipa_keyboard,
                        get_back_to_dashboard_keyboard)
 from config import PRICING
@@ -15,7 +16,6 @@ async def show_dashboard(update: Update, context: ContextTypes.DEFAULT_TYPE, ses
     query = update.callback_query
     safe_username = html.escape(session['username'])
     
-    # Fetch the latest user data to ensure balance is current
     current_user_state = get_user_by_telegram_id(session['telegram_id'])
     
     dashboard_text = f"""
@@ -30,7 +30,6 @@ Please choose an option below.
     if query:
         await query.edit_message_text(dashboard_text, reply_markup=keyboard, parse_mode=ParseMode.HTML)
     else:
-        # This handles the case for /start command or after login
         await context.bot.send_message(
             chat_id=update.effective_chat.id,
             text=dashboard_text,
@@ -52,7 +51,6 @@ async def check_balance_callback(update: Update, context: ContextTypes.DEFAULT_T
     """Refreshes the dashboard to show the latest balance."""
     query = update.callback_query
     await query.answer(text="🔄 Refreshing balance...", show_alert=False)
-    # Just call the main dashboard function which already fetches the latest balance
     await dashboard_callback(update, context)
 
 
@@ -71,7 +69,6 @@ async def history_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not history_items:
         history_text = "You have no purchase history."
     else:
-        # Format the history into a nice list
         formatted_items = []
         for item in history_items:
             formatted_items.append(
@@ -87,7 +84,7 @@ async def history_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def modder_ipa_menu_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Displays the Modder IPA menu with buy options."""
+    """Displays the Modder IPA menu with buy options AND current stock."""
     query = update.callback_query
     await query.answer()
     session = check_session(update.effective_user.id)
@@ -95,7 +92,30 @@ async def modder_ipa_menu_callback(update: Update, context: ContextTypes.DEFAULT
         await query.edit_message_text("Your session has expired. Please /start again.")
         return
 
-    text = "📱 <b>Modder IPA Menu</b>\n\nPlease select an option to continue."
+    # --- NEW LOGIC TO FETCH AND DISPLAY STOCK ---
+    stock_levels = get_key_stock()
+    stock_dict = {item['duration_days']: item['count'] for item in stock_levels}
+    
+    stock_text_lines = []
+    # Loop through pricing to maintain a consistent order
+    for plan_key, plan_details in PRICING.items():
+        days = plan_details['days']
+        label = plan_details['label']
+        count = stock_dict.get(days, 0) # Get count, default to 0 if not in stock
+        stock_text_lines.append(f"     - {label}: {count} keys")
+
+    if not stock_text_lines:
+        stock_display = "   All items are currently out of stock."
+    else:
+        stock_display = "\n".join(stock_text_lines)
+
+    text = f"""📱 <b>Modder IPA Menu</b>
+
+   <b>Stock:</b>
+{stock_display}
+
+Please select an option to continue.
+"""
     await query.edit_message_text(text, reply_markup=get_modder_ipa_keyboard(), parse_mode=ParseMode.HTML)
 
 
@@ -120,7 +140,6 @@ async def buy_key_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     duration = plan['days']
     user_id = session['id']
     
-    # Get the most up-to-date user balance
     current_user_state = get_user_by_telegram_id(session['telegram_id'])
     user_balance = current_user_state['balance']
 

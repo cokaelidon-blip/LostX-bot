@@ -11,7 +11,6 @@ def get_main_dashboard_keyboard(is_admin=False):
     """Returns the main dashboard keyboard for a logged-in user."""
     keyboard = [
         [InlineKeyboardButton("📱 Modder IPA", callback_data='modder_ipa_menu')],
-        # --- BUTTONS ADDED HERE ---
         [
             InlineKeyboardButton("💰 Check Balance", callback_data='check_balance'),
             InlineKeyboardButton("📜 History", callback_data='history')
@@ -19,7 +18,6 @@ def get_main_dashboard_keyboard(is_admin=False):
         [InlineKeyboardButton("🔒 Logout", callback_data='logout')]
     ]
     if is_admin:
-        # Add the Admin Panel button for admins
         keyboard.insert(1, [InlineKeyboardButton("👑 Admin Panel", callback_data='admin_panel')])
     return InlineKeyboardMarkup(keyboard)
 
@@ -39,7 +37,7 @@ def get_back_to_dashboard_keyboard():
     keyboard = [[InlineKeyboardButton("« Back to Dashboard", callback_data='back_to_dashboard')]]
     return InlineKeyboardMarkup(keyboard)
 
-# --- Admin Keyboards (Unchanged) ---
+# --- Admin Keyboards ---
 
 def get_admin_panel_keyboard():
     """Returns the main admin panel keyboard."""
@@ -63,6 +61,8 @@ def get_admin_users_keyboard():
             InlineKeyboardButton("➕ Create User", callback_data='admin_create_user'),
             InlineKeyboardButton("💰 Add Balance", callback_data='admin_add_balance')
         ],
+        # --- NEW BUTTON ADDED HERE ---
+        [InlineKeyboardButton("➖ Remove User", callback_data='admin_remove_user')],
         [InlineKeyboardButton("« Back to Admin Panel", callback_data='admin_panel')]
     ]
     return InlineKeyboardMarkup(keyboard)
@@ -83,7 +83,8 @@ def get_bulk_add_duration_keyboard():
     keyboard = []
     for key, plan in PRICING.items():
         text = f"Add for: {plan['label']}"
-        keyboard.append([InlineKeyboardButton(text, callback_data=f'add_keys_duration_{plan["days"]}')])
+        # Corrected callback data format
+        keyboard.append([InlineKeyboardButton(text, callback_data=f'add_keys_for_{plan["days"]}')])
     keyboard.append([InlineKeyboardButton("« Cancel", callback_data='cancel_admin_action')])
     return InlineKeyboardMarkup(keyboard)
 

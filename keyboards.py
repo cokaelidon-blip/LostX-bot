@@ -11,13 +11,15 @@ def get_main_dashboard_keyboard(is_admin=False):
     """Returns the main dashboard keyboard for a logged-in user."""
     keyboard = [
         [InlineKeyboardButton("📱 Modder IPA", callback_data='modder_ipa_menu')],
+        # --- BUTTONS ADDED HERE ---
         [
-            # History will be implemented next
-            # InlineKeyboardButton("📜 History", callback_data='history'),
-            InlineKeyboardButton("🔒 Logout", callback_data='logout')
-        ]
+            InlineKeyboardButton("💰 Check Balance", callback_data='check_balance'),
+            InlineKeyboardButton("📜 History", callback_data='history')
+        ],
+        [InlineKeyboardButton("🔒 Logout", callback_data='logout')]
     ]
     if is_admin:
+        # Add the Admin Panel button for admins
         keyboard.insert(1, [InlineKeyboardButton("👑 Admin Panel", callback_data='admin_panel')])
     return InlineKeyboardMarkup(keyboard)
 
@@ -37,7 +39,7 @@ def get_back_to_dashboard_keyboard():
     keyboard = [[InlineKeyboardButton("« Back to Dashboard", callback_data='back_to_dashboard')]]
     return InlineKeyboardMarkup(keyboard)
 
-# --- Admin Keyboards (RESTORED) ---
+# --- Admin Keyboards (Unchanged) ---
 
 def get_admin_panel_keyboard():
     """Returns the main admin panel keyboard."""

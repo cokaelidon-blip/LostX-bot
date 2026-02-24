@@ -217,3 +217,17 @@ def set_setting(key, value): pass
 def get_key_stock(): pass
 def get_bot_stats(): pass
 def bulk_add_keys(duration, keys): pass
+
+# ADD THIS FUNCTION TO THE END OF database.py
+
+def get_user_purchase_history(user_id):
+    """Retrieves all keys purchased by a specific user."""
+    conn = get_db_connection()
+    try:
+        history = conn.execute(
+            'SELECT key, duration_days, activation_date FROM license_keys WHERE user_id = ? ORDER BY activation_date DESC',
+            (user_id,)
+        ).fetchall()
+        return [dict(row) for row in history]
+    finally:
+        conn.close()

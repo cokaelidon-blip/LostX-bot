@@ -8,8 +8,8 @@ from database import init_database
 from handlers.common import (start, login_start, login_username, login_password,
                            cancel_login, logout_callback, unknown_command,
                            USERNAME, PASSWORD)
-from handlers.user import * # Import all user handlers
-from handlers.admin import * # Import all admin handlers
+from handlers.user import *
+from handlers.admin import *
 
 # Set up logging
 logging.basicConfig(
@@ -24,6 +24,9 @@ def main() -> None:
 
     application = Application.builder().token(config.BOT_TOKEN).build()
 
+    # Define a single cancel handler for all admin conversations
+    cancel_handler = CallbackQueryHandler(cancel_admin_action, pattern='^cancel_admin_action$')
+
     # --- Conversation Handlers ---
     login_conv = ConversationHandler(
         entry_points=[CallbackQueryHandler(login_start, pattern='^login$')],
@@ -37,34 +40,49 @@ def main() -> None:
     create_user_conv = ConversationHandler(
         entry_points=[CallbackQueryHandler(admin_create_user_callback, pattern='^admin_create_user$')],
         states={
-            CREATE_USER_USERNAME: [MessageHandler(filters.TEXT, create_user_username)],
-            CREATE_USER_PASSWORD: [MessageHandler(filters.TEXT, create_user_password)],
+            CREATE_USER_USERNAME: [MessageHandler(filters.TEXT & ~filters.COMMAND, create_user_username)],
+            CREATE_USER_PASSWORD: [MessageHandler(filters.TEXT & ~filters.COMMAND, create_user_password)],
         },
-        fallbacks=[CallbackQueryHandler(cancel_admin_action, pattern='^cancel_admin_action$')],
+        fallbacks=[cancel_handler],
+        conversation_timeout=60
     )
 
     add_balance_conv = ConversationHandler(
         entry_points=[CallbackQueryHandler(admin_add_balance_callback, pattern='^admin_add_balance$')],
         states={
-            ADD_BALANCE_USERNAME: [MessageHandler(filters.TEXT, add_balance_username)],
-            ADD_BALANCE_AMOUNT: [MessageHandler(filters.TEXT, add_balance_amount)],
+            ADD_BALANCE_USERNAME: [MessageHandler(filters.TEXT & ~filters.COMMAND, add_balance_username)],
+            ADD_BALANCE_AMOUNT: [MessageHandler(filters.TEXT & ~filters.COMMAND, add_balance_amount)],
         },
-        fallbacks=[CallbackQueryHandler(cancel_admin_action, pattern='^cancel_admin_action$')],
+        fallbacks=[cancel_handler],
+        conversation_timeout=60
     )
 
     set_link_conv = ConversationHandler(
         entry_points=[CallbackQueryHandler(admin_set_link_start, pattern='^admin_set_ipa_link$')],
-        states={SET_IPA_LINK: [MessageHandler(filters.TEXT, admin_receive_new_link)]},
-        fallbacks=[CallbackQueryHandler(cancel_admin_action, pattern='^cancel_admin_action$')],
+        states={SET_IPA_LINK: [MessageHandler(filters.TEXT & ~filters.COMMAND, admin_receive_new_link)]},
+        fallbacks=[cancel_handler],
+        conversation_timeout=60
     )
 
+    # ADD KEYS CONVERSATION (FIXED STRUCTURE)
     add_keys_conv = ConversationHandler(
         entry_points=[CallbackQueryHandler(admin_add_keys_start, pattern='^admin_add_keys$')],
         states={
-            SELECT_KEY_DURATION: [CallbackQueryHandler(select_key_duration, pattern='^add_keys_duration_')],
-            RECEIVE_KEYS_LIST: [MessageHandler(filters.TEXT, receive_keys_list)],
+            SELECT_KEY_DURATION: [CallbackQueryHandler(select_key_duration, pattern='^add_keys_for_')],
+            RECEIVE_KEYS_LIST: [MessageHandler(filters.TEXT & ~filters.COMMAND, receive_keys_list)],
         },
-        fallbacks=[CallbackQueryHandler(cancel_admin_action, pattern='^cancel_admin_action$')],
+        fallbacks=[cancel_handler],
+        conversation_timeout=120 # Longer timeout for pasting keys
+    )
+
+    # REMOVE USER CONVERSATION (NEW)
+    remove_user_conv = ConversationHandler(
+        entry_points=[CallbackQueryHandler(admin_remove_user_start, pattern='^admin_remove_user$')],
+        states={
+            REMOVE_USER_USERNAME: [MessageHandler(filters.TEXT & ~filters.COMMAND, remove_user_username)],
+        },
+        fallbacks=[cancel_handler],
+        conversation_timeout=60
     )
 
     # --- Add All Handlers ---
@@ -76,12 +94,12 @@ def main() -> None:
     application.add_handler(add_balance_conv)
     application.add_handler(set_link_conv)
     application.add_handler(add_keys_conv)
+    application.add_handler(remove_user_conv) # <-- Add new conversation
     
     # User Callbacks
     application.add_handler(CallbackQueryHandler(logout_callback, pattern='^logout$'))
     application.add_handler(CallbackQueryHandler(dashboard_callback, pattern='^back_to_dashboard$'))
     application.add_handler(CallbackQueryHandler(modder_ipa_menu_callback, pattern='^modder_ipa_menu$'))
-    # --- TYPO CORRECTED HERE ---
     application.add_handler(CallbackQueryHandler(buy_key_callback, pattern='^buy_plan_'))
     application.add_handler(CallbackQueryHandler(download_ipa_callback, pattern='^download_ipa$'))
     application.add_handler(CallbackQueryHandler(history_callback, pattern='^history$'))

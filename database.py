@@ -231,3 +231,29 @@ def get_user_purchase_history(user_id):
         return [dict(row) for row in history]
     finally:
         conn.close()
+
+
+# ADD THIS FUNCTION TO THE END OF database.py
+
+def delete_user_by_username(username):
+    """Finds a user by username and deletes them. Returns True on success."""
+    conn = get_db_connection()
+    try:
+        # First, check if the user exists and is not an admin to prevent self-deletion
+        user = conn.execute('SELECT id, is_admin FROM users WHERE username = ?', (username,)).fetchone()
+        if not user:
+            return False, "User not found."
+        # Optional: Add a check to prevent deleting other admins
+        # if user['is_admin']:
+        #     return False, "Cannot delete an admin account."
+            
+        # Un-assign any keys they own
+        conn.execute('UPDATE license_keys SET user_id = NULL, activation_date = NULL WHERE user_id = ?', (user['id'],))
+        # Invalidate their session
+        conn.execute('DELETE FROM sessions WHERE user_id = ?', (user['id'],))
+        # Delete the user
+        conn.execute('DELETE FROM users WHERE id = ?', (user['id'],))
+        conn.commit()
+        return True, f"User '{username}' and all their data has been deleted."
+    finally:
+        conn.close()

@@ -5,11 +5,14 @@ from telegram.ext import (Application, CommandHandler, CallbackQueryHandler,
 
 import config
 from database import init_database
+# --- CORRECTED: Added imports for conversation states ---
 from handlers.common import (start, login_start, login_username, login_password,
-                           cancel_login, logout_callback, unknown_command)
-from handlers.user import (dashboard_callback, download_ipa_callback, # <-- CORRECTED NAME
+                           cancel_login, logout_callback, unknown_command,
+                           USERNAME, PASSWORD)
+from handlers.user import (dashboard_callback, download_ipa_callback,
                          buy_menu_callback, buy_key_callback,
                          confirm_purchase_callback, add_balance_callback)
+# --- CORRECT_ED: Added imports for conversation states ---
 from handlers.admin import (admin_panel_callback, admin_users_callback, admin_keys_callback,
                           view_stock_callback, admin_stats_callback, cancel_admin_action,
                           admin_create_user_callback, create_user_username, create_user_password,
@@ -17,7 +20,9 @@ from handlers.admin import (admin_panel_callback, admin_users_callback, admin_ke
                           toggle_user_command, reset_device_command,
                           admin_set_link_start, admin_receive_new_link,
                           add_custom_keys_start, select_key_duration, receive_keys_list,
-                          cancel_bulk_add)
+                          cancel_bulk_add, CREATE_USER_USERNAME, CREATE_USER_PASSWORD,
+                          ADD_BALANCE_USERNAME, ADD_BALANCE_AMOUNT, SET_IPA_LINK,
+                          SELECT_KEY_DURATION, RECEIVE_KEYS_LIST)
 
 # Set up logging
 logging.basicConfig(
@@ -102,7 +107,7 @@ def main() -> None:
     application.add_handler(CallbackQueryHandler(dashboard_callback, pattern='^back_to_dashboard$'))
     application.add_handler(CallbackQueryHandler(buy_menu_callback, pattern='^buy_keys$'))
     application.add_handler(CallbackQueryHandler(add_balance_callback, pattern='^add_balance$'))
-    application.add_handler(CallbackQueryHandler(download_ipa_callback, pattern='^download_ipa$')) # <-- CORRECTED NAME
+    application.add_handler(CallbackQueryHandler(download_ipa_callback, pattern='^download_ipa$'))
     application.add_handler(CallbackQueryHandler(buy_key_callback, pattern='^buy_plan_'))
     application.add_handler(CallbackQueryHandler(confirm_purchase_callback, pattern='^confirm_purchase$'))
 

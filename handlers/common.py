@@ -5,105 +5,92 @@ from telegram import Update
 from telegram.ext import ContextTypes, ConversationHandler
 from telegram.constants import ParseMode
 
-from database import (get_user, create_user, get_user_by_username, get_user_by_telegram_id, 
-                      check_session, link_telegram_id, create_session, invalidate_session,
-                      promote_user_to_admin)
-# --- CORRECTED IMPORT HERE ---
-from keyboards import get_start_keyboard, get_main_dashboard_keyboard
-from config import ADMIN_IDS, ADMIN_USERNAME, ADMIN_PASSWORD
-from handlers.user import show_dashboard # Import the dashboard display function
+from database import (create_user, get_user_by_username, get_user_by_telegram_id, 
+                      hash_password, create_session, check_session, clear_session) # <-- REMOVED get_user
+from keyboards import get_start_keyboard
+from handlers.user import show_dashboard
 
-USERNAME, PASSWORD = range(1, 3)
+# States for login conversation
+USERNAME, PASSWORD = range(2)
 
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    telegram_id = update.effective_user.id
-    
-    # --- Auto-create and/or promote admin ---
-    if telegram_id in ADMIN_IDS:
-        admin_user = get_user_by_telegram_id(telegram_id)
-        if not admin_user:
-            if ADMIN_USERNAME and ADMIN_PASSWORD:
-                existing_user = get_user_by_username(ADMIN_USERNAME)
-                if not existing_user:
-                    create_user(ADMIN_USERNAME, ADMIN_PASSWORD, is_admin=True)
-                
-                user_to_link = get_user_by_username(ADMIN_USERNAME)
-                if user_to_link:
-                    link_telegram_id(user_to_link['id'], telegram_id)
-                    promote_user_to_admin(telegram_id)
-                    await update.message.reply_text(f"✅ Admin account '{ADMIN_USERNAME}' linked.")
-        elif not admin_user['is_admin']:
-            promote_user_to_admin(telegram_id)
-            await update.message.reply_text("✅ Your account has been granted admin privileges.")
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handles the /start command."""
+    user_id = update.effective_user.id
+    session = check_session(user_id)
 
-    # --- Session check for all users ---
-    session_user = check_session(telegram_id)
-    if session_user:
-        # If the user is logged in, show them the proper dashboard
-        await show_dashboard(update, context, session_user)
+    if session:
+        # User is already logged in, show them the dashboard
+        await show_dashboard(update, context, session)
     else:
-        # If not logged in, show the simple welcome message
-        welcome_text = "👋 <b>Welcome to the Modder IPA Bot!</b>\n\nPlease log in to continue."
+        # User is not logged in
         await update.message.reply_text(
-            welcome_text,
-            reply_markup=get_start_keyboard(),
-            parse_mode=ParseMode.HTML
+            "Welcome to the Modder IPA Bot! Please log in to continue.",
+            reply_markup=get_start_keyboard()
         )
 
 async def login_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Starts the login conversation."""
     query = update.callback_query
     await query.answer()
-    await query.edit_message_text(text="👤 Please enter your username:")
+    await query.edit_message_text(text="Please enter your username:")
     return USERNAME
 
 async def login_username(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    context.user_data['login_username'] = update.message.text
-    await update.message.reply_text("🔑 Please enter your password:")
+    """Stores the username and asks for the password."""
+    context.user_data['username'] = update.message.text
+    await update.message.reply_text("Please enter your password:")
     return PASSWORD
 
 async def login_password(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    username = context.user_data.get('login_username')
+    """Checks the password and completes login."""
+    username = context.user_data.get('username')
     password = update.message.text
-    telegram_id = update.effective_user.id
-    try: await update.message.delete()
-    except Exception: pass
+    
+    # --- THIS IS THE CORRECTED LOGIN LOGIC ---
+    user = get_user_by_username(username)
+    
+    if user and user['password_hash'] == hash_password(password):
+        # Check if the user's telegram ID is set, if not, set it.
+        if not user['telegram_id']:
+            conn = get_db_connection()
+            conn.execute('UPDATE users SET telegram_id = ? WHERE id = ?', (update.effective_user.id, user['id']))
+            conn.commit()
+            conn.close()
+            logging.info(f"Associated Telegram ID {update.effective_user.id} with user '{username}'.")
+            
+        # Create a session for the user
+        create_session(update.effective_user.id, user)
+        session = check_session(update.effective_user.id)
 
-    user = get_user(username, password)
-
-    if user:
-        link_telegram_id(user['id'], telegram_id)
-        create_session(user['id'])
-
-        if telegram_id in ADMIN_IDS and not user.get('is_admin'):
-            promote_user_to_admin(telegram_id)
+        await update.message.reply_text("✅ Login successful!")
+        await show_dashboard(update, context, session) # Show the main dashboard
         
-        # Now fetch the final, updated user state
-        final_user_state = get_user_by_telegram_id(telegram_id)
-        
-        # Show the main dashboard after a successful login
-        await show_dashboard(update, context, final_user_state)
+        context.user_data.clear()
+        return ConversationHandler.END
     else:
-        await update.message.reply_text(
-            "❌ <b>Login Failed</b>\n\nInvalid username or password.",
-            reply_markup=get_start_keyboard(),
-            parse_mode=ParseMode.HTML
-        )
-    context.user_data.clear()
-    return ConversationHandler.END
+        await update.message.reply_text("❌ Invalid username or password. Please try again or type /cancel.")
+        # We stay in the PASSWORD state to allow another password attempt
+        return PASSWORD
 
 async def cancel_login(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    await update.message.reply_text('Action cancelled.', reply_markup=get_start_keyboard())
+    """Cancels and ends the login conversation."""
     context.user_data.clear()
+    await update.message.reply_text(
+        "Login cancelled. Welcome to the Modder IPA Bot!",
+        reply_markup=get_start_keyboard()
+    )
     return ConversationHandler.END
 
 async def logout_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Logs the user out and clears their session."""
     query = update.callback_query
     await query.answer()
-    invalidate_session(update.effective_user.id)
+    clear_session(update.effective_user.id)
     await query.edit_message_text(
-        "👋 You have been logged out.",
+        "You have been logged out.",
         reply_markup=get_start_keyboard()
     )
 
 async def unknown_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("🤔 Sorry, I didn't understand that command. Try using /start.")
+    """Handles any unknown commands."""
+    await update.message.reply_text("Sorry, I didn't understand that command.")

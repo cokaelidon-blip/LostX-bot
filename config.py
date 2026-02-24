@@ -7,14 +7,12 @@ BOT_TOKEN = os.environ.get('BOT_TOKEN', '')
 # Admin Configuration
 ADMIN_USERNAME = os.environ.get('ADMIN_USERNAME', 'El1don_07')
 
-# Multiple Admin IDs - Add IDs separated by commas in Railway
-# Example: ADMIN_IDS = "6180001609,123456789"
+# Multiple Admin IDs
 ADMIN_IDS_ENV = os.environ.get('ADMIN_IDS', '6180001609')
 ADMIN_IDS = [int(id.strip()) for id in ADMIN_IDS_ENV.split(',') if id.strip()]
 
-# Database
-DATABASE_URL = os.environ.get('DATABASE_URL', 'sqlite:///modder_ipa.db')
-DATABASE_NAME = "modder_ipa.db"
+# Database - This will be provided by Railway
+DATABASE_URL = os.environ.get('DATABASE_URL', '') 
 
 # Pricing (in USD)
 PRICING = {

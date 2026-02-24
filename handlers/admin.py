@@ -22,7 +22,10 @@ SELECT_KEY_DURATION, RECEIVE_KEYS_LIST = range(15, 17)
 async def check_admin_session(update: Update, context: ContextTypes.DEFAULT_TYPE) -> dict | None:
     """Checks if the user is an admin and has an active session."""
     query = update.callback_query
-    session = check_session(update.effective_user.id)
+    # For commands, the user is in update.message, not update.callback_query
+    user = update.effective_user
+
+    session = check_session(user.id)
     if not session or not session.get('is_admin'):
         if query:
             await query.answer("You are not authorized to do this.", show_alert=True)
@@ -177,7 +180,7 @@ async def reset_device_command(update: Update, context: ContextTypes.DEFAULT_TYP
         reset_user_device(user['id'])
         await update.message.reply_text(f"Reset device binding for user {username}.")
     except (IndexError, ValueError):
-        await update.message.reply_text("Usage: /resetdevice <username>")
+        await update.message.reply_.text("Usage: /resetdevice <username>")
 
 # --- Set IPA Link Conversation ---
 async def admin_set_link_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -227,7 +230,7 @@ async def receive_keys_list(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data.clear()
     return ConversationHandler.END
 
-async def cancel_bulk_add(update: Update, context: ContextTypes.DEFAULT_T):
+async def cancel_bulk_add(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
     context.user_data.clear()

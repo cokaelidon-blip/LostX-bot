@@ -110,6 +110,10 @@ def _execute(query, params=None, fetch=None):
         conn.close()
 
 # --- NEW FUNCTION ---
+def get_user_by_telegram_id(telegram_id):
+    """Fetches a user by their Telegram ID."""
+    return _execute("SELECT * FROM users WHERE telegram_id = %s;", (telegram_id,), fetch="one")
+
 def promote_user_to_admin(telegram_id):
     """Sets the is_admin flag to TRUE for a user based on their Telegram ID."""
     _execute("UPDATE users SET is_admin = TRUE WHERE telegram_id = %s;", (telegram_id,))

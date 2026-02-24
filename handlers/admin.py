@@ -1,354 +1,235 @@
 # handlers/admin.py
 import html
 from telegram import Update
-from telegram.ext import (ContextTypes, ConversationHandler,
-                          CallbackQueryHandler, MessageHandler, filters)
+from telegram.ext import ContextTypes, ConversationHandler
 from telegram.constants import ParseMode
 
-from database import (check_session, create_user, get_all_users,
-                      get_user_by_username, update_balance, add_key_to_stock,
-                      get_stock_count, get_statistics, toggle_user_status,
-                      reset_user_device, update_setting)
-from keyboards import (get_admin_keyboard, get_keys_management_keyboard,
-                       get_duration_selection_keyboard)
+from database import (check_session, get_all_users, get_user_by_username,
+                      create_user, update_balance, toggle_user_status,
+                      reset_user_device, get_stock_count, get_statistics,
+                      update_setting, add_key_to_stock)
+from keyboards import (get_admin_panel_keyboard, get_admin_users_keyboard,
+                       get_admin_keys_keyboard, get_key_duration_keyboard,
+                       get_back_to_dashboard_keyboard)
 
-CREATE_USER_USERNAME, CREATE_USER_PASSWORD = range(2)
-ADD_BALANCE_USERNAME, ADD_BALANCE_AMOUNT = range(2, 4)
-SET_IPA_LINK = range(4, 5)
-SELECT_KEY_DURATION, RECEIVE_KEYS_LIST = range(5, 7)
-
-
-def is_admin(session):
-    return session and session.get('is_admin')
+# Conversation states for admin actions
+CREATE_USER_USERNAME, CREATE_USER_PASSWORD = range(10, 12)
+ADD_BALANCE_USERNAME, ADD_BALANCE_AMOUNT = range(12, 14)
+SET_IPA_LINK = range(14, 15)
+SELECT_KEY_DURATION, RECEIVE_KEYS_LIST = range(15, 17)
 
 
-async def admin_panel_callback(update: Update,
-                               context: ContextTypes.DEFAULT_TYPE):
+async def check_admin_session(update: Update, context: ContextTypes.DEFAULT_TYPE) -> dict | None:
+    """Checks if the user is an admin and has an active session."""
     query = update.callback_query
-    await query.answer()
-    if not is_admin(check_session(update.effective_user.id)):
-        await query.edit_message_text("❌ Access denied. Admin only.")
-        return
+    session = check_session(update.effective_user.id)
+    if not session or not session.get('is_admin'):
+        if query:
+            await query.answer("You are not authorized to do this.", show_alert=True)
+        else: # For commands
+            await update.message.reply_text("You are not authorized to do this.")
+        return None
+    if query:
+        await query.answer()
+    return session
 
-    await query.edit_message_text("⚙️ <b>Admin Panel</b>\n\nSelect an option:",
-                                  reply_markup=get_admin_keyboard(),
+
+async def admin_panel_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not await check_admin_session(update, context): return
+    query = update.callback_query
+    text = "👑 <b>Admin Panel</b>\n\nWelcome to the admin control center."
+    await query.edit_message_text(text,
+                                  reply_markup=get_admin_panel_keyboard(),
                                   parse_mode=ParseMode.HTML)
 
 
-async def admin_users_callback(update: Update,
-                               context: ContextTypes.DEFAULT_TYPE):
+async def admin_users_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not await check_admin_session(update, context): return
     query = update.callback_query
-    await query.answer()
-    if not is_admin(check_session(update.effective_user.id)):
-        await query.edit_message_text("❌ Access denied.")
-        return
-
     users = get_all_users()
-    if not users:
-        text = "👥 <b>User Management</b>\n\nNo users found."
-    else:
-        text = "👥 <b>User Management</b>\n\n"
-        for user in users[:20]:
-            status = "✅" if user['is_active'] else "❌"
-            text += f"{status} <b>{html.escape(user['username'])}</b> - ${user['balance']:.2f}\n"
-
-    text += """
-
-To manage a user, use commands:
-<code>/toggleuser username</code> - Enable/Disable
-<code>/resetdevice username</code> - Reset device binding"""
-
+    user_list = "\n".join(
+        [f"👤 `{u['username']}` | 💳 ${u['balance']:.2f} | {'✅ Active' if u['is_active'] else '❌ Inactive'}" for u in users]
+    ) if users else "No users found."
+    text = f"👥 <b>User Management</b>\n\n{user_list}"
     await query.edit_message_text(text,
-                                  reply_markup=get_admin_keyboard(),
+                                  reply_markup=get_admin_users_keyboard(),
                                   parse_mode=ParseMode.HTML)
 
 
-async def admin_keys_callback(update: Update,
-                              context: ContextTypes.DEFAULT_TYPE):
+async def admin_keys_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not await check_admin_session(update, context): return
     query = update.callback_query
-    await query.answer()
-    if not is_admin(check_session(update.effective_user.id)):
-        await query.edit_message_text("❌ Access denied.")
-        return
-
-    await query.edit_message_text("🔑 <b>Keys Stock Management</b>\n\nSelect an option:",
-                                  reply_markup=get_keys_management_keyboard(),
-                                  parse_mode=ParseMode.HTML)
+    text = "🔑 <b>Key Management</b>\n\nManage license keys and IPA link."
+    await query.edit_message_text(text, reply_markup=get_admin_keys_keyboard())
 
 
-async def view_stock_callback(update: Update,
-                              context: ContextTypes.DEFAULT_TYPE):
+async def view_stock_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not await check_admin_session(update, context): return
     query = update.callback_query
-    await query.answer()
-    if not is_admin(check_session(update.effective_user.id)):
-        await query.edit_message_text("❌ Access denied.")
-        return
-
     stock = get_stock_count()
-    text = f"""
-📦 <b>Current Stock</b>
-
-• 1 Day Keys: <b>{stock.get(1, 0)}</b>
-• 7 Days Keys: <b>{stock.get(7, 0)}</b>
-• 1 Month Keys: <b>{stock.get(30, 0)}</b>
-
-<b>Total: {sum(stock.values())} keys</b>
-    """
-
+    stock_text = "\n".join([f"• {days}-day keys: {count}" for days, count in stock.items()]) if stock else "No keys in stock."
+    text = f"📈 <b>Current Stock</b>\n\n{stock_text}"
     await query.edit_message_text(text,
-                                  reply_markup=get_keys_management_keyboard(),
+                                  reply_markup=get_admin_panel_keyboard(),
                                   parse_mode=ParseMode.HTML)
 
 
-async def admin_stats_callback(update: Update,
-                               context: ContextTypes.DEFAULT_TYPE):
+async def admin_stats_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not await check_admin_session(update, context): return
     query = update.callback_query
-    await query.answer()
-    if not is_admin(check_session(update.effective_user.id)):
-        await query.edit_message_text("❌ Access denied.")
-        return
-
     stats = get_statistics()
     text = f"""
 📊 <b>Bot Statistics</b>
 
-👥 Total Users: <b>{stats['total_users']}</b>
-🔑 Keys in Stock: <b>{stats['keys_in_stock']}</b>
-🛒 Total Sales: <b>{stats['total_sales']}</b>
-💰 Total Revenue: <b>${stats['total_revenue']:.2f}</b>
+• Total Users: <b>{stats.get('total_users', 0)}</b>
+• Keys in Stock: <b>{stats.get('keys_in_stock', 0)}</b>
+• Total Sales: <b>{stats.get('total_sales', 0)}</b>
+• Total Revenue: <b>${stats.get('total_revenue', 0):.2f}</b>
     """
-
     await query.edit_message_text(text,
-                                  reply_markup=get_admin_keyboard(),
+                                  reply_markup=get_admin_panel_keyboard(),
                                   parse_mode=ParseMode.HTML)
 
 
-async def add_custom_keys_start(update: Update,
-                                context: ContextTypes.DEFAULT_TYPE):
+async def cancel_admin_action(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Cancels any admin conversation."""
     query = update.callback_query
     await query.answer()
-    if not is_admin(check_session(update.effective_user.id)):
-        await query.edit_message_text("❌ Access denied.")
-        return ConversationHandler.END
-
-    await query.edit_message_text("""
-<b>Step 1: Select Key Duration</b>
-
-Please choose the duration for the keys you are about to add:
-                                  """,
-                                  reply_markup=get_duration_selection_keyboard(),
-                                  parse_mode=ParseMode.HTML)
-    return SELECT_KEY_DURATION
-
-
-async def select_key_duration(update: Update,
-                              context: ContextTypes.DEFAULT_TYPE):
-    query = update.callback_query
-    await query.answer()
-    duration = int(query.data.replace("duration_select_", ""))
-    context.user_data['bulk_add_duration'] = duration
-    await query.edit_message_text(f"""
-<b>Step 2: Paste Your Keys</b>
-
-You have selected <b>{duration} days</b> duration.
-
-Please send a message containing the list of keys. Each key must be on a <b>new line</b>.
-                                  """,
-                                  parse_mode=ParseMode.HTML)
-    return RECEIVE_KEYS_LIST
-
-
-async def receive_keys_list(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    duration = context.user_data.get('bulk_add_duration')
-    if not duration:
-        await update.message.reply_text("Error: Duration not set. Please start over.")
-        return ConversationHandler.END
-
-    keys_list = [key.strip() for key in update.message.text.splitlines() if key.strip()]
-    if not keys_list:
-        await update.message.reply_text("No valid keys found in your message. Please try again.")
-        return RECEIVE_KEYS_LIST
-
-    await update.message.reply_text(f"⏳ Processing {len(keys_list)} keys...")
-    success_count, fail_count = 0, 0
-    failed_keys = []
-    for key in keys_list:
-        success, result = add_key_to_stock(duration, key_value=key)
-        if success:
-            success_count += 1
-        else:
-            fail_count += 1
-            failed_keys.append(f"<code>{html.escape(key)}</code> ({html.escape(str(result))})")
-
-    report = f"""
-✅ <b>Bulk Add Report</b>
-
-Total keys processed: <b>{len(keys_list)}</b>
-Successfully added: <b>{success_count}</b>
-Failed (duplicates): <b>{fail_count}</b>
-    """
-    if failed_keys:
-        report += "\n<b>Failed Keys:</b>\n" + "\n".join(failed_keys)
-
-    await update.message.reply_text(report, parse_mode=ParseMode.HTML)
-    context.user_data.pop('bulk_add_duration', None)
+    context.user_data.clear()
+    await query.edit_message_text("Admin action cancelled.", reply_markup=get_admin_panel_keyboard())
     return ConversationHandler.END
 
 
-async def cancel_bulk_add(update: Update, context: ContextTypes.DEFAULT_TYPE):
+# --- Create User Conversation ---
+async def admin_create_user_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not await check_admin_session(update, context): return ConversationHandler.END
     query = update.callback_query
-    await query.answer()
-    context.user_data.pop('bulk_add_duration', None)
-    await query.edit_message_text("❌ Bulk key addition cancelled.", reply_markup=get_keys_management_keyboard())
-    return ConversationHandler.END
-
-
-async def admin_create_user_callback(update: Update,
-                                     context: ContextTypes.DEFAULT_TYPE):
-    query = update.callback_query
-    await query.answer()
-    if not is_admin(check_session(update.effective_user.id)):
-        await query.edit_message_text("❌ Access denied.")
-        return ConversationHandler.END
-    await query.edit_message_text("➕ <b>Create New User</b>\n\nEnter the username for the new user:", parse_mode=ParseMode.HTML)
+    await query.edit_message_text("Enter the username for the new user:")
     return CREATE_USER_USERNAME
 
-
-async def create_user_username(update: Update,
-                               context: ContextTypes.DEFAULT_TYPE):
+async def create_user_username(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data['new_username'] = update.message.text
-    await update.message.reply_text("🔑 Now enter the password for this user:")
+    await update.message.reply_text("Enter a password for the new user:")
     return CREATE_USER_PASSWORD
 
-
-async def create_user_password(update: Update,
-                               context: ContextTypes.DEFAULT_TYPE):
-    username = context.user_data.get('new_username')
+async def create_user_password(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    username = context.user_data['new_username']
     password = update.message.text
-    try: await update.message.delete()
-    except: pass
-    success, result = create_user(username, password)
-    if success:
-        await update.message.reply_text(f"""
-✅ <b>User Created Successfully!</b>
-
-👤 Username: <code>{html.escape(username)}</code>
-🔑 Password: <code>{html.escape(password)}</code>
-
-Share these credentials with the user.
-        """, parse_mode=ParseMode.HTML)
-    else:
-        await update.message.reply_text(f"❌ Failed to create user: {html.escape(str(result))}")
+    success, message = create_user(username, password)
+    await update.message.reply_text(f"✅ {message}" if success else f"❌ {message}")
+    context.user_data.clear()
+    # This part can be improved to show the admin menu again
     return ConversationHandler.END
 
 
-async def admin_add_balance_callback(update: Update,
-                                     context: ContextTypes.DEFAULT_TYPE):
+# --- Add Balance Conversation ---
+async def admin_add_balance_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not await check_admin_session(update, context): return ConversationHandler.END
     query = update.callback_query
-    await query.answer()
-    if not is_admin(check_session(update.effective_user.id)):
-        await query.edit_message_text("❌ Access denied.")
-        return ConversationHandler.END
-    await query.edit_message_text("💵 <b>Add Balance</b>\n\nEnter the username:", parse_mode=ParseMode.HTML)
+    await query.edit_message_text("Enter the username to add balance to:")
     return ADD_BALANCE_USERNAME
 
-
-async def add_balance_username(update: Update,
-                               context: ContextTypes.DEFAULT_TYPE):
+async def add_balance_username(update: Update, context: ContextTypes.DEFAULT_TYPE):
     username = update.message.text
     user = get_user_by_username(username)
     if not user:
-        await update.message.reply_text("❌ User not found. Please start over.")
+        await update.message.reply_text("User not found. Action cancelled.")
         return ConversationHandler.END
     context.user_data['balance_user_id'] = user['id']
-    context.user_data['balance_username'] = username
-    await update.message.reply_text(f"""
-👤 User: <b>{html.escape(username)}</b>
-💰 Current Balance: <b>${user['balance']:.2f}</b>
-
-Enter the amount to add (in USD):
-    """, parse_mode=ParseMode.HTML)
+    await update.message.reply_text(f"Current balance for {username} is ${user['balance']:.2f}. Enter the amount to add:")
     return ADD_BALANCE_AMOUNT
 
-
-async def add_balance_amount(update: Update,
-                             context: ContextTypes.DEFAULT_TYPE):
+async def add_balance_amount(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         amount = float(update.message.text)
+        user_id = context.user_data['balance_user_id']
+        update_balance(user_id, amount, 'deposit', 'Admin deposit')
+        await update.message.reply_text(f"✅ Successfully added ${amount:.2f} to the user's balance.")
     except ValueError:
-        await update.message.reply_text("❌ Invalid amount. Please enter a number.")
-        return ADD_BALANCE_AMOUNT
-    user_id = context.user_data.get('balance_user_id')
-    username = context.user_data.get('balance_username')
-    update_balance(user_id, amount, 'admin_add', 'Added by admin')
-    await update.message.reply_text(f"""
-✅ <b>Balance Added Successfully!</b>
-
-👤 User: <b>{html.escape(username)}</b>
-💵 Amount Added: <b>${amount:.2f}</b>
-    """, parse_mode=ParseMode.HTML)
+        await update.message.reply_text("Invalid amount. Please enter a number.")
+    context.user_data.clear()
     return ConversationHandler.END
 
 
-async def cancel_admin_action(update: Update,
-                              context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("❌ Action cancelled.")
-    await update.message.reply_text("⚙️ <b>Admin Panel</b>\n\nSelect an option:", reply_markup=get_admin_keyboard(), parse_mode=ParseMode.HTML)
-    return ConversationHandler.END
+# --- Commands for user management ---
+async def toggle_user_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not await check_admin_session(update, context): return
+    try:
+        username = context.args[0]
+        user = get_user_by_username(username)
+        if not user:
+            await update.message.reply_text("User not found.")
+            return
+        toggle_user_status(user['id'])
+        await update.message.reply_text(f"Toggled status for user {username}.")
+    except (IndexError, ValueError):
+        await update.message.reply_text("Usage: /toggleuser <username>")
 
 
-async def toggle_user_command(update: Update,
-                              context: ContextTypes.DEFAULT_TYPE):
-    if not is_admin(check_session(update.effective_user.id)):
-        await update.message.reply_text("❌ Access denied.")
-        return
-    if not context.args:
-        await update.message.reply_text("Usage: /toggleuser username")
-        return
-    username = context.args[0]
-    user = get_user_by_username(username)
-    if not user:
-        await update.message.reply_text("❌ User not found.")
-        return
-    toggle_user_status(user['id'])
-    await update.message.reply_text(f"✅ User <b>{html.escape(username)}</b> status toggled.", parse_mode=ParseMode.HTML)
+async def reset_device_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not await check_admin_session(update, context): return
+    try:
+        username = context.args[0]
+        user = get_user_by_username(username)
+        if not user:
+            await update.message.reply_text("User not found.")
+            return
+        reset_user_device(user['id'])
+        await update.message.reply_text(f"Reset device binding for user {username}.")
+    except (IndexError, ValueError):
+        await update.message.reply_text("Usage: /resetdevice <username>")
 
-
-async def reset_device_command(update: Update,
-                               context: ContextTypes.DEFAULT_TYPE):
-    if not is_admin(check_session(update.effective_user.id)):
-        await update.message.reply_text("❌ Access denied.")
-        return
-    if not context.args:
-        await update.message.reply_text("Usage: /resetdevice username")
-        return
-    username = context.args[0]
-    user = get_user_by_username(username)
-    if not user:
-        await update.message.reply_text("❌ User not found.")
-        return
-    reset_user_device(user['id'])
-    await update.message.reply_text(f"✅ Device binding reset for <b>{html.escape(username)}</b>.", parse_mode=ParseMode.HTML)
-
-
+# --- Set IPA Link Conversation ---
 async def admin_set_link_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not await check_admin_session(update, context): return ConversationHandler.END
     query = update.callback_query
-    await query.answer()
-    if not is_admin(check_session(update.effective_user.id)):
-        await query.edit_message_text("❌ Access denied.")
-        return ConversationHandler.END
-    await query.edit_message_text("""
-🔗 <b>Update IPA Link</b>
-
-Please send me the new IPA link now. Send /cancel to abort.
-    """, parse_mode=ParseMode.HTML)
+    await query.edit_message_text("Please send the new IPA download link.")
     return SET_IPA_LINK
 
-
-async def admin_receive_new_link(update: Update,
-                                 context: ContextTypes.DEFAULT_TYPE):
+async def admin_receive_new_link(update: Update, context: ContextTypes.DEFAULT_TYPE):
     new_link = update.message.text
-    update_setting('ipa_link', new_link)
-    await update.message.reply_text("✅ <b>Link Updated Successfully!</b>\n\nNew link is now set.", parse_mode=ParseMode.HTML)
-    await update.message.reply_text("⚙️ <b>Admin Panel</b>\n\nSelect an option:", reply_markup=get_admin_keyboard(), parse_mode=ParseMode.HTML)
+    update_setting('ipa_download_link', new_link)
+    await update.message.reply_text("✅ IPA download link has been updated.")
+    return ConversationHandler.END
+
+# --- Bulk Add Keys Conversation ---
+async def add_custom_keys_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not await check_admin_session(update, context): return ConversationHandler.END
+    query = update.callback_query
+    await query.edit_message_text("Select the duration for the keys you want to add:", reply_markup=get_key_duration_keyboard())
+    return SELECT_KEY_DURATION
+
+async def select_key_duration(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    duration = int(query.data.split('_')[-1])
+    context.user_data['key_duration'] = duration
+    await query.edit_message_text(f"Adding {duration}-day keys. Now, send a list of keys, one per line.")
+    return RECEIVE_KEYS_LIST
+
+async def receive_keys_list(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    keys = update.message.text.splitlines()
+    duration = context.user_data['key_duration']
+    added_count = 0
+    failed_keys = []
+    for key in keys:
+        if key.strip():
+            success, _ = add_key_to_stock(duration, key.strip())
+            if success:
+                added_count += 1
+            else:
+                failed_keys.append(key)
+    
+    response = f"✅ Added {added_count} new keys to stock.\n"
+    if failed_keys:
+        response += f"❌ Failed to add {len(failed_keys)} keys (duplicates): {', '.join(failed_keys)}"
+
+    await update.message.reply_text(response)
+    context.user_data.clear()
+    return ConversationHandler.END
+
+async def cancel_bulk_add(update: Update, context: ContextTypes.DEFAULT_T):
+    query = update.callback_query
+    await query.answer()
+    context.user_data.clear()
+    await query.edit_message_text("Action cancelled.", reply_markup=get_admin_keys_keyboard())
     return ConversationHandler.END

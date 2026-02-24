@@ -109,6 +109,10 @@ def _execute(query, params=None, fetch=None):
         cursor.close()
         conn.close()
 
+# --- NEW FUNCTION ---
+def promote_user_to_admin(telegram_id):
+    """Sets the is_admin flag to TRUE for a user based on their Telegram ID."""
+    _execute("UPDATE users SET is_admin = TRUE WHERE telegram_id = %s;", (telegram_id,))
 
 def update_setting(key, value):
     _execute("INSERT INTO settings (key, value) VALUES (%s, %s) ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value;", (key, value))

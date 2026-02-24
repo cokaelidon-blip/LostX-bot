@@ -5,7 +5,6 @@ from telegram.ext import (Application, CommandHandler, CallbackQueryHandler,
                           MessageHandler, filters, ConversationHandler,
                           ContextTypes)
 
-# Import configurations and handlers
 import config
 from database import init_database
 from handlers.common import (start, login_start, login_username,
@@ -23,29 +22,29 @@ from handlers.admin import (
     add_balance_username, add_balance_amount, cancel_admin_action,
     toggle_user_command, reset_device_command, admin_set_link_start,
     admin_receive_new_link,
-    # NEW imports for bulk key add
     add_custom_keys_start,
     select_key_duration,
     receive_keys_list,
     cancel_bulk_add,
-    # States
-    CREATE_USER_USERNAME,
-    CREATE_USER_PASSWORD,
-    ADD_BALANCE_USERNAME,
-    ADD_BALANCE_AMOUNT,
+    CREATE_USER_USERNAME, CREATE_USER_PASSWORD,
+    ADD_BALANCE_USERNAME, ADD_BALANCE_AMOUNT,
     SET_IPA_LINK,
-    SELECT_KEY_DURATION,
-    RECEIVE_KEYS_LIST)
+    SELECT_KEY_DURATION, RECEIVE_KEYS_LIST)
 
 # Set up logging
 logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
     level=logging.INFO)
 
-
 def main() -> None:
     # Initialize database
-    init_database()
+    try:
+        init_database()
+        logging.info("Database initialized successfully.")
+    except Exception as e:
+        logging.error(f"FATAL: Could not initialize database: {e}")
+        logging.error("Please ensure the DATABASE_URL environment variable is set correctly in Railway.")
+        return # Stop the bot if the database can't be reached
 
     # Create the Application and pass it your bot's token.
     application = Application.builder().token(config.BOT_TOKEN).build()
@@ -61,9 +60,7 @@ def main() -> None:
         per_message=False)
 
     register_conv = ConversationHandler(
-        entry_points=[
-            CallbackQueryHandler(register_start, pattern='^register$')
-        ],
+        entry_points=[CallbackQueryHandler(register_start, pattern='^register$')],
         states={
             1: [MessageHandler(filters.TEXT & ~filters.COMMAND, register_username)],
             2: [MessageHandler(filters.TEXT & ~filters.COMMAND, register_password)],
@@ -118,7 +115,7 @@ def main() -> None:
     application.add_handler(CommandHandler("toggleuser", toggle_user_command))
     application.add_handler(CommandHandler("resetdevice", reset_device_command))
 
-    # --- CallbackQuery Handlers for buttons ---
+    # --- CallbackQuery Handlers ---
     application.add_handler(CallbackQueryHandler(dashboard_callback, pattern='^dashboard$'))
     application.add_handler(CallbackQueryHandler(modder_ipa_callback, pattern='^modder_ipa$'))
     application.add_handler(CallbackQueryHandler(buy_menu_callback, pattern='^buy_menu$'))
@@ -128,8 +125,6 @@ def main() -> None:
     application.add_handler(CallbackQueryHandler(history_callback, pattern='^history$'))
     application.add_handler(CallbackQueryHandler(ipa_link_callback, pattern='^ipa_link$'))
     application.add_handler(CallbackQueryHandler(logout_callback, pattern='^logout$'))
-
-    # Admin callbacks
     application.add_handler(CallbackQueryHandler(admin_panel_callback, pattern='^admin_panel$'))
     application.add_handler(CallbackQueryHandler(admin_users_callback, pattern='^admin_users$'))
     application.add_handler(CallbackQueryHandler(admin_keys_callback, pattern='^admin_keys$'))

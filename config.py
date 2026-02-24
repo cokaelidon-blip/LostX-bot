@@ -16,12 +16,11 @@ ADMIN_USERNAME = os.getenv('ADMIN_USERNAME')
 ADMIN_PASSWORD = os.getenv('ADMIN_PASSWORD')
 
 # --- Database Configuration ---
-# THE FINAL FIX: We are HARDCODING the path to the SQLite file.
-# This forces the bot to IGNORE the postgresql DATABASE_URL from the environment.
-DATABASE_URL = '/tmp/bot_database.db'
+# THE FINAL, PERMANENT FIX:
+# We are now pointing to a file inside the persistent /data volume.
+DATABASE_URL = '/data/bot_database.db'
 
 # --- Pricing Configuration ---
-# All prices are in USD
 PRICING = {
     'plan_1': {
         'label': '1-Day Access',

@@ -2,12 +2,14 @@
 import sqlite3
 import hashlib
 import os
-from config import DATABASE_FILE, ADMIN_USERNAME, ADMIN_PASSWORD, ADMIN_IDS
+# --- FIX #1: Corrected DATABASE_FILE to DATABASE_URL ---
+from config import DATABASE_URL, ADMIN_USERNAME, ADMIN_PASSWORD, ADMIN_IDS
 
 # --- Database Connection ---
 def get_db_connection():
     """Establishes a connection to the SQLite database."""
-    conn = sqlite3.connect(DATABASE_FILE)
+    # --- FIX #2: Corrected DATABASE_FILE to DATABASE_URL ---
+    conn = sqlite3.connect(DATABASE_URL)
     conn.row_factory = sqlite3.Row
     return conn
 
@@ -163,7 +165,6 @@ def bulk_add_keys(duration, keys):
         data_to_insert = [(key, duration) for key in keys]
         cursor.executemany('INSERT OR IGNORE INTO license_keys (key, duration_days) VALUES (?, ?)', data_to_insert)
         conn.commit()
-        # --- THIS LINE WAS MISSING ---
         return cursor.rowcount
     finally:
         conn.close()

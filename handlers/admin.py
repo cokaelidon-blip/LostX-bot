@@ -5,13 +5,13 @@ from telegram import Update
 from telegram.ext import ContextTypes, ConversationHandler
 from telegram.constants import ParseMode
 
-from database import (get_all_users_paged, get_key_stock, get_bot_stats,
+from database import (get_all_users_paged, get_key_stock, get_bot_stats, # Corrected to match function
                       create_user, update_balance, get_user_by_username,
                       set_setting, bulk_add_keys,
                       toggle_user_active_status, reset_user_device_id)
 from keyboards import (get_admin_panel_keyboard, get_admin_users_keyboard,
                        get_admin_keys_keyboard, get_cancel_admin_action_keyboard,
-                       get_back_to_dashboard_keyboard, get_bulk_add_duration_keyboard, # <-- CORRECTED IMPORT
+                       get_back_to_dashboard_keyboard, get_bulk_add_duration_keyboard,
                        get_cancel_bulk_add_keyboard)
 
 # Conversation states
@@ -32,7 +32,7 @@ async def admin_users_callback(update: Update, context: ContextTypes.DEFAULT_TYP
     query = update.callback_query
     await query.answer()
 
-    # Fetch users (assuming a function get_all_users_paged exists)
+    # Now correctly calls the function that exists
     users = get_all_users_paged()
     if not users:
         user_list_text = "No users found."
@@ -117,7 +117,6 @@ async def create_user_password(update: Update, context: ContextTypes.DEFAULT_TYP
     success, message = create_user(username, password)
     await update.message.reply_text(message)
     context.user_data.clear()
-    # After action, show the main admin panel again
     await update.message.reply_text("Returning to admin panel.", reply_markup=get_admin_panel_keyboard())
     return ConversationHandler.END
 
@@ -136,7 +135,7 @@ async def add_balance_username(update: Update, context: ContextTypes.DEFAULT_TYP
     if not user:
         await update.message.reply_text("User not found. Please try again or cancel.",
                                         reply_markup=get_cancel_admin_action_keyboard())
-        return ADD_BALANCE_USERNAME # Stay in the same state
+        return ADD_BALANCE_USERNAME
     context.user_data['user_to_credit'] = user
     await update.message.reply_text(f"Enter the amount to add to {username}'s balance (e.g., 10.50):")
     return ADD_BALANCE_AMOUNT
@@ -152,7 +151,7 @@ async def add_balance_amount(update: Update, context: ContextTypes.DEFAULT_TYPE)
         await update.message.reply_text(f"✅ Successfully added ${amount:.2f} to {user['username']}'s balance.")
     except ValueError:
         await update.message.reply_text("Invalid amount. Please enter a positive number (e.g., 10.50).")
-        return ADD_BALANCE_AMOUNT # Ask for amount again
+        return ADD_BALANCE_AMOUNT
 
     context.user_data.clear()
     await update.message.reply_text("Returning to admin panel.", reply_markup=get_admin_panel_keyboard())
@@ -176,7 +175,7 @@ async def reset_device_command(update: Update, context: ContextTypes.DEFAULT_TYP
     try:
         username = context.args[0]
         success, message = reset_user_device_id(username)
-        await update.message.reply_text(message)
+        await update.message.reply_text(message.
     except (IndexError, ValueError):
         await update.message.reply_text("Usage: /resetdevice <username>")
 
@@ -202,7 +201,7 @@ async def add_custom_keys_start(update: Update, context: ContextTypes.DEFAULT_TY
     query = update.callback_query
     await query.answer()
     text = "Please select the duration for the keys you want to add:"
-    await query.edit_message_text(text=text, reply_markup=get_bulk_add_duration_keyboard()) # <-- CORRECTED FUNCTION CALL
+    await query.edit_message_text(text=text, reply_markup=get_bulk_add_duration_keyboard())
     return SELECT_KEY_DURATION
 
 async def select_key_duration(update: Update, context: ContextTypes.DEFAULT_TYPE):

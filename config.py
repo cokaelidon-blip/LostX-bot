@@ -1,9 +1,14 @@
 # config.py
 import os
-from dotenv import load_dotenv
 
-# Load environment variables from .env file for local development
-load_dotenv()
+# --- Optional: Load .env file for local development ---
+# This will try to load the .env file but will not cause an error if it's missing
+# or if the python-dotenv library is not installed.
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    pass # Silently continue if python-dotenv is not installed
 
 # --- Required Variables ---
 BOT_TOKEN = os.getenv('BOT_TOKEN')
@@ -13,11 +18,11 @@ DATABASE_URL = os.getenv('DATABASE_URL')
 ADMIN_IDS_str = os.getenv('ADMIN_IDS', "")
 try:
     ADMIN_IDS = [int(i.strip()) for i in ADMIN_IDS_str.split(',') if i]
-except ValueError:
-    print("Warning: ADMIN_IDS contains non-numeric values. Please check your environment variables.")
+except (ValueError, TypeError):
+    print("Warning: ADMIN_IDS contains non-numeric values or is not set. Please check your environment variables.")
     ADMIN_IDS = []
 
-# --- Admin Account Auto-Creation (NEW) ---
+# --- Admin Account Auto-Creation ---
 ADMIN_USERNAME = os.getenv('ADMIN_USERNAME')
 ADMIN_PASSWORD = os.getenv('ADMIN_PASSWORD')
 

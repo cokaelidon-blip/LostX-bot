@@ -139,4 +139,81 @@ async def confirm_purchase_callback(update: Update, context: ContextTypes.DEFAUL
     if STOCK_MODE:
         key_record = get_available_key(duration_days)
         if not key_record:
-   
+            await query.edit_message_text("❌ Sorry, this item is currently out of stock. Please contact an admin.",
+                                          reply_markup=get_back_to_dashboard_keyboard())
+            return
+
+    # Process the purchase
+    update_balance(user_id, -plan_price, 'purchase', f"Purchase of {plan['label']}")
+    
+    if STOCK_MODE and key_record:
+        sold_key_info = sell_key(key_record['id'], user_id)
+        record_purchase(user_id, key_record['id'], plan_price, duration_days)
+        key_value = sold_key_info['key_value']
+    else:
+        # In non-stock mode, you would have a different logic to grant access.
+        # For now, we'll just confirm the purchase.
+        key_value = "ACCESS GRANTED (auto)"
+
+    text = f"""
+✅ <b>Purchase Successful!</b>
+
+Thank you for your purchase of <b>{plan['label']}</b>.
+
+Your access key is:
+`{key_value}`
+
+This key has been activated on your account.
+"""
+    await query.edit_message_text(text,
+                                  reply_markup=get_back_to_dashboard_keyboard(),
+                                  parse_mode=ParseMode.HTML)
+
+
+async def balance_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    session = check_session(update.effective_user.id)
+    if not session:
+        await query.edit_message_text("Your session has expired. Please /start again.", parse_mode=ParseMode.HTML)
+        return
+        
+    text = f"""
+💰 <b>Your Balance</b>
+
+Your current balance is: <b>${session['balance']:.2f}</b>
+
+To add funds, please send USDT (TRC20) to the address below and contact an admin.
+
+Deposit address:
+`{USDT_ADDRESS}`
+    """
+    await query.edit_message_text(text,
+                                  reply_markup=get_back_to_dashboard_keyboard(),
+                                  parse_mode=ParseMode.HTML)
+
+
+async def history_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    # This is a placeholder. A real implementation would query the 'purchases' table.
+    text = "<b>Purchase History</b>\n\n- 1 Month Subscription - 2024-01-15\n- 7 Day Subscription - 2023-12-20"
+    await query.edit_message_text(text,
+                                  reply_markup=get_back_to_dashboard_keyboard(),
+                                  parse_mode=ParseMode.HTML)
+
+async def ipa_link_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    session = check_session(update.effective_user.id)
+    if not session:
+        await query.edit_message_text("Your session has expired. Please /start again.", parse_mode=ParseMode.HTML)
+        return
+
+    ipa_link = get_setting('ipa_download_link')
+    if ipa_link:
+        text = f"🔗 Here is the IPA download link:\n\n{ipa_link}"
+    else:
+        text = "⚠️ The IPA download link has not been set by the admin yet."
+
+    await query.edit_message_text(text, reply_markup=get_back_to_dashboard_keyboard(), parse_mode=ParseMode.HTML)

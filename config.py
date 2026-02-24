@@ -16,8 +16,8 @@ ADMIN_USERNAME = os.getenv('ADMIN_USERNAME')
 ADMIN_PASSWORD = os.getenv('ADMIN_PASSWORD')
 
 # --- Database Configuration ---
-# THIS IS THE FIX. We are providing a full, absolute path for the database file.
-DATABASE_URL = os.getenv('DATABASE_URL', '/app/bot_database.db')
+# THE FIX: We are now using the /tmp/ directory, which is almost always writable.
+DATABASE_URL = os.getenv('DATABASE_URL', '/tmp/bot_database.db')
 
 # --- Pricing Configuration ---
 # All prices are in USD

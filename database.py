@@ -2,13 +2,12 @@
 import sqlite3
 import hashlib
 import os
-# --- FIX #1: Corrected DATABASE_FILE to DATABASE_URL ---
-from config import DATABASE_URL, ADMIN_USERNAME, ADMIN_PASSWORD, ADMIN_IDS
+# This is the hardcoded path from our last fix. It is correct.
+DATABASE_URL = '/tmp/bot_database.db'
 
 # --- Database Connection ---
 def get_db_connection():
     """Establishes a connection to the SQLite database."""
-    # --- FIX #2: Corrected DATABASE_FILE to DATABASE_URL ---
     conn = sqlite3.connect(DATABASE_URL)
     conn.row_factory = sqlite3.Row
     return conn
@@ -17,75 +16,40 @@ def init_database():
     """Initializes the database and creates tables if they don't exist."""
     print("Checking/creating database tables...")
     conn = get_db_connection()
-    # Check for settings table
     cursor = conn.cursor()
-    cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='settings';")
-    if cursor.fetchone() is None:
-        print("Creating tables...")
-        conn.executescript('''
-            CREATE TABLE IF NOT EXISTS users (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                username TEXT UNIQUE NOT NULL,
-                password_hash TEXT NOT NULL,
-                balance REAL DEFAULT 0.0,
-                is_admin BOOLEAN DEFAULT FALSE,
-                is_active BOOLEAN DEFAULT TRUE,
-                device_id TEXT,
-                telegram_id INTEGER UNIQUE
-            );
-            CREATE TABLE IF NOT EXISTS license_keys (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                key TEXT UNIQUE NOT NULL,
-                duration_days INTEGER NOT NULL,
-                is_used BOOLEAN DEFAULT FALSE,
-                user_id INTEGER,
-                activation_date TEXT,
-                FOREIGN KEY (user_id) REFERENCES users(id)
-            );
-            CREATE TABLE IF NOT EXISTS sessions (
-                telegram_id INTEGER PRIMARY KEY,
-                user_id INTEGER NOT NULL,
-                username TEXT NOT NULL,
-                login_time TEXT DEFAULT CURRENT_TIMESTAMP,
-                FOREIGN KEY (user_id) REFERENCES users(id)
-            );
-            CREATE TABLE IF NOT EXISTS settings (
-                key TEXT PRIMARY KEY,
-                value TEXT
-            );
-        ''')
+    conn.executescript('''
+        CREATE TABLE IF NOT EXISTS users (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            username TEXT UNIQUE NOT NULL,
+            password_hash TEXT NOT NULL,
+            balance REAL DEFAULT 0.0,
+            is_admin BOOLEAN DEFAULT FALSE,
+            is_active BOOLEAN DEFAULT TRUE,
+            device_id TEXT,
+            telegram_id INTEGER UNIQUE
+        );
+        CREATE TABLE IF NOT EXISTS license_keys (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            key TEXT UNIQUE NOT NULL,
+            duration_days INTEGER NOT NULL,
+            is_used BOOLEAN DEFAULT FALSE,
+            user_id INTEGER,
+            activation_date TEXT,
+            FOREIGN KEY (user_id) REFERENCES users(id)
+        );
+        CREATE TABLE IF NOT EXISTS sessions (
+            telegram_id INTEGER PRIMARY KEY,
+            user_id INTEGER NOT NULL,
+            username TEXT NOT NULL,
+            login_time TEXT DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (user_id) REFERENCES users(id)
+        );
+        CREATE TABLE IF NOT EXISTS settings (
+            key TEXT PRIMARY KEY,
+            value TEXT
+        );
+    ''')
     print("Database tables checked/created successfully.")
-    
-    # --- Auto-Create/Link Admin Accounts ---
-    if ADMIN_IDS and ADMIN_USERNAME:
-        admin_ids_list = [int(i.strip()) for i in ADMIN_IDS.split(',')]
-        for admin_tg_id in admin_ids_list:
-            # Check if a user with this Telegram ID already exists
-            user = conn.execute('SELECT * FROM users WHERE telegram_id = ?', (admin_tg_id,)).fetchone()
-            if user:
-                # If user exists but is not admin, promote them
-                if not user['is_admin']:
-                    conn.execute('UPDATE users SET is_admin = TRUE WHERE telegram_id = ?', (admin_tg_id,))
-                    print(f"Promoted existing user with Telegram ID {admin_tg_id} to admin.")
-            else:
-                # If no user with this Telegram ID, check for the admin username
-                admin_user = conn.execute('SELECT * FROM users WHERE username = ?', (ADMIN_USERNAME,)).fetchone()
-                if admin_user:
-                    # If admin username exists but is not linked, link it
-                    if admin_user['telegram_id'] is None:
-                        conn.execute('UPDATE users SET telegram_id = ?, is_admin = TRUE WHERE username = ?', (admin_tg_id, ADMIN_USERNAME))
-                        print(f"Linked existing admin account '{ADMIN_USERNAME}' to Telegram ID {admin_tg_id}.")
-                else:
-                    # If neither exists, create a new admin account
-                    if ADMIN_PASSWORD:
-                        password_hash = hashlib.sha256(ADMIN_PASSWORD.encode()).hexdigest()
-                        conn.execute(
-                            'INSERT INTO users (username, password_hash, is_admin, telegram_id) VALUES (?, ?, TRUE, ?)',
-                            (ADMIN_USERNAME, password_hash, admin_tg_id)
-                        )
-                        print(f"Created new admin account '{ADMIN_USERNAME}' for Telegram ID {admin_tg_id}.")
-        conn.commit()
-    
     conn.close()
 
 # --- Utility Functions ---
@@ -103,7 +67,8 @@ def create_session(telegram_id, user):
 
 def check_session(telegram_id):
     conn = get_db_connection()
-    session_data = conn.execute('SELECT s.user_id, s.username, u.is_admin, u.telegram_id FROM sessions s JOIN users u ON s.user_id = u.id WHERE s.telegram_id = ?', (telegram_id,)).fetchone()
+    # FIX: Select user_id AS id to prevent KeyError in other parts of the code
+    session_data = conn.execute('SELECT s.user_id as id, s.username, u.is_admin, u.telegram_id FROM sessions s JOIN users u ON s.user_id = u.id WHERE s.telegram_id = ?', (telegram_id,)).fetchone()
     conn.close()
     return dict(session_data) if session_data else None
 
@@ -214,16 +179,17 @@ def get_bot_stats():
     stats = {}
     stats['total_users'] = conn.execute('SELECT COUNT(*) FROM users').fetchone()[0]
     stats['total_keys_sold'] = conn.execute('SELECT COUNT(*) FROM license_keys WHERE is_used = TRUE').fetchone()[0]
+    # This calculation might be simplified, assuming pricing is consistent
     total_earnings_query = conn.execute(
         """
-        SELECT SUM(p.price) 
-        FROM license_keys lk
-        JOIN (
-            SELECT 1 as duration, 2.00 as price
-            UNION ALL SELECT 7, 7.00
-            UNION ALL SELECT 30, 15.00
-        ) p ON lk.duration_days = p.duration
-        WHERE lk.is_used = TRUE
+        SELECT SUM(
+            CASE duration_days 
+            WHEN 1 THEN 2.00 
+            WHEN 7 THEN 7.00 
+            WHEN 30 THEN 15.00 
+            ELSE 0 END
+        ) 
+        FROM license_keys WHERE is_used = TRUE
         """
     ).fetchone()[0]
     stats['total_earnings'] = total_earnings_query if total_earnings_query is not None else 0.0
@@ -257,8 +223,5 @@ def delete_user_by_username(username):
     finally:
         conn.close()
 
-# --- Admin Functions ---
-def toggle_user_active_status(user_id):
-    pass 
-def reset_user_device_id(user_id):
-    pass
+def toggle_user_active_status(user_id): pass 
+def reset_user_device_id(user_id): pass

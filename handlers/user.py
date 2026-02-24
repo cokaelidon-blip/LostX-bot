@@ -157,4 +157,112 @@ async def confirm_purchase_callback(update: Update,
 
     key_id, key_value = None, None
     if STOCK_MODE:
-        key_data
+        key_data = get_available_key(plan['days'])
+        if not key_data:
+            await query.edit_message_text("❌ Sorry, this key is no longer available.", reply_markup=get_back_keyboard())
+            return
+        key_id, key_value = key_data['id'], key_data['key_value']
+        sell_key(key_id, session['user_id'])
+    else:
+        from database import add_key_to_stock, generate_key
+        key_value = generate_key()
+        success, _ = add_key_to_stock(plan['days'], key_value)
+
+    update_balance(session['user_id'], -plan['price'], 'purchase', f"Purchased {plan['days']} day key")
+    record_purchase(session['user_id'], key_id, plan['price'], plan['days'])
+    safe_key_value = escape_html(key_value)
+
+    success_text = f"""
+✅ <b>Purchase Successful!</b>
+
+🔑 <b>Your Key:</b>
+<code>{safe_key_value}</code>
+
+📅 Duration: <b>{plan['label']}</b>
+💰 Amount Paid: <b>${plan['price']:.2f}</b>
+
+⚠️ <b>Important:</b> Save this key! It won't be shown again.
+
+Thank you for your purchase!
+    """
+    await query.edit_message_text(success_text,
+                                  reply_markup=get_back_keyboard(),
+                                  parse_mode=ParseMode.HTML)
+
+
+async def balance_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    session = check_session(update.effective_user.id)
+    if not session:
+        from keyboards import get_start_keyboard
+        await query.edit_message_text("❌ Session expired. Please login again.", reply_markup=get_start_keyboard())
+        return
+
+    safe_admin_username = escape_html(ADMIN_USERNAME)
+    safe_usdt_address = escape_html(USDT_ADDRESS)
+
+    text = f"""
+💰 <b>Your Balance</b>
+
+Current Balance: <b>${session['balance']:.2f}</b>
+
+To add funds, contact admin @{safe_admin_username}
+
+💳 <b>USDT (TRC20) Address:</b>
+<code>{safe_usdt_address}</code>
+
+Send the amount and transaction proof to admin.
+    """
+    await query.edit_message_text(text,
+                                  reply_markup=get_back_keyboard(),
+                                  parse_mode=ParseMode.HTML)
+
+
+async def history_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    session = check_session(update.effective_user.id)
+    if not session:
+        from keyboards import get_start_keyboard
+        await query.edit_message_text("❌ Session expired. Please login again.", reply_markup=get_start_keyboard())
+        return
+
+    from database import get_connection
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute('SELECT amount, duration_days, purchased_at FROM purchases WHERE user_id = %s ORDER BY purchased_at DESC LIMIT 10', (session['user_id'],))
+    purchases = cursor.fetchall()
+    conn.close()
+
+    if not purchases:
+        text = "📜 <b>Purchase History</b>
+No purchases yet."
+    else:
+        text = "📜 <b>Purchase History (Last 10)</b>
+"
+        for i, (amount, days, date) in enumerate(purchases, 1):
+            text += f"{i}. {days} days - ${amount:.2f} - {escape_html(str(date)[:10])}\n"
+    await query.edit_message_text(text,
+                                  reply_markup=get_back_keyboard(),
+                                  parse_mode=ParseMode.HTML)
+
+
+async def ipa_link_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    if not check_session(update.effective_user.id):
+        from keyboards import get_start_keyboard
+        await query.edit_message_text("❌ Session expired. Please login again.", reply_markup=get_start_keyboard())
+        return
+
+    ipa_link = get_setting('ipa_link')
+    if ipa_link:
+        safe_ipa_link = escape_html(ipa_link)
+        text = f"🔗 <b>Here is the latest IPA link:</b>
+<code>{safe_ipa_link}</code>"
+    else:
+        text = "❌ The IPA link has not been set by the admin yet. Please check back later."
+    await context.bot.send_message(chat_id=update.effective_chat.id,
+                                   text=text,
+                                   parse_mode=ParseMode.HTML)

@@ -2,8 +2,10 @@
 import sqlite3
 import hashlib
 import os
-# This is the hardcoded path from our last fix. It is correct.
-DATABASE_URL = '/tmp/bot_database.db'
+import config # <-- IMPORT CONFIG TO ACCESS ADMIN CREDENTIALS
+
+# This is the correct, permanent path. Do not change.
+DATABASE_URL = '/data/bot_database.db'
 
 # --- Database Connection ---
 def get_db_connection():
@@ -13,10 +15,10 @@ def get_db_connection():
     return conn
 
 def init_database():
-    """Initializes the database and creates tables if they don't exist."""
+    """Initializes the database, creates tables, and creates the initial admin user if needed."""
     print("Checking/creating database tables...")
     conn = get_db_connection()
-    cursor = conn.cursor()
+    # Create tables if they don't exist
     conn.executescript('''
         CREATE TABLE IF NOT EXISTS users (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -50,7 +52,37 @@ def init_database():
         );
     ''')
     print("Database tables checked/created successfully.")
-    conn.close()
+
+    # ---------------------------------------------------------------- #
+    # --- THIS IS THE CRITICAL LOGIC THAT WAS MISSING --- #
+    # ---------------------------------------------------------------- #
+    try:
+        cursor = conn.cursor()
+        # Check if any users exist in the database
+        cursor.execute("SELECT COUNT(*) FROM users")
+        user_count = cursor.fetchone()[0]
+
+        # If the database is new (0 users) AND the admin credentials are set in the environment
+        if user_count == 0 and config.ADMIN_USERNAME and config.ADMIN_PASSWORD:
+            print(f"--- NO USERS FOUND ---")
+            print(f"Creating initial admin user '{config.ADMIN_USERNAME}' from environment variables...")
+            
+            password_hash = hash_password(config.ADMIN_PASSWORD)
+            conn.execute(
+                'INSERT INTO users (username, password_hash, is_admin, is_active) VALUES (?, ?, ?, ?)',
+                (config.ADMIN_USERNAME, password_hash, True, True)
+            )
+            conn.commit()
+            print("✅ Initial admin user created successfully.")
+        
+    except sqlite3.Error as e:
+        print(f"❌ Error during initial admin user creation: {e}")
+    finally:
+        # We always close the connection after we're done.
+        conn.close()
+    
+    print("Database initialization process complete.")
+    # ---------------------------------------------------------------- #
 
 # --- Utility Functions ---
 def hash_password(password):
@@ -67,7 +99,6 @@ def create_session(telegram_id, user):
 
 def check_session(telegram_id):
     conn = get_db_connection()
-    # FIX: Select user_id AS id to prevent KeyError in other parts of the code
     session_data = conn.execute('SELECT s.user_id as id, s.username, u.is_admin, u.telegram_id FROM sessions s JOIN users u ON s.user_id = u.id WHERE s.telegram_id = ?', (telegram_id,)).fetchone()
     conn.close()
     return dict(session_data) if session_data else None
@@ -179,7 +210,6 @@ def get_bot_stats():
     stats = {}
     stats['total_users'] = conn.execute('SELECT COUNT(*) FROM users').fetchone()[0]
     stats['total_keys_sold'] = conn.execute('SELECT COUNT(*) FROM license_keys WHERE is_used = TRUE').fetchone()[0]
-    # This calculation might be simplified, assuming pricing is consistent
     total_earnings_query = conn.execute(
         """
         SELECT SUM(

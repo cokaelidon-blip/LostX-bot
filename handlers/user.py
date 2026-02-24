@@ -5,13 +5,14 @@ from telegram.ext import ContextTypes
 from telegram.constants import ParseMode
 
 from database import (check_session, get_user_balance, get_available_key,
-                      update_balance, sell_key, record_purchase, get_setting)
-from keyboards import (get_buy_menu_keyboard, get_confirmation_keyboard,
-                       get_back_to_dashboard_keyboard, get_dashboard_keyboard)
-from config import PRICING, USDT_ADDRESS, STOCK_MODE
+                      sell_key, update_balance, record_purchase, get_setting)
+from keyboards import (get_dashboard_keyboard, get_buy_menu_keyboard,
+                       get_back_to_dashboard_keyboard, get_confirmation_keyboard)
+from config import PRICING, STOCK_MODE, ADMIN_CONTACT_USERNAME
 
 
 async def dashboard_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handles the 'Back to Dashboard' button."""
     query = update.callback_query
     await query.answer()
     session = check_session(update.effective_user.id)
@@ -23,197 +24,156 @@ async def dashboard_callback(update: Update, context: ContextTypes.DEFAULT_TYPE)
     dashboard_text = f"""
 🎮 <b>Welcome back, {safe_username}!</b>
 
-You are logged in.
+You are already logged in.
 
 💰 Balance: <b>${session['balance']:.2f}</b>
     """
-    await query.edit_message_text(dashboard_text,
-                                  reply_markup=get_dashboard_keyboard(session['is_admin']),
-                                  parse_mode=ParseMode.HTML)
-
-
-async def modder_ipa_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    query = update.callback_query
-    await query.answer()
-    session = check_session(update.effective_user.id)
-    if not session:
-        await query.edit_message_text("Your session has expired. Please /start again.", parse_mode=ParseMode.HTML)
-        return
-
-    # In a real scenario, you'd check if the user has an active subscription
-    # For now, we just show a generic message.
-    text = """
-<b>Modder IPA Information</b>
-
-This section will contain details about the Modder IPA, version info, and perhaps a download link if the user has an active subscription.
-    """
-    await query.edit_message_text(text,
-                                  reply_markup=get_back_to_dashboard_keyboard(),
-                                  parse_mode=ParseMode.HTML)
+    await query.edit_message_text(
+        dashboard_text,
+        reply_markup=get_dashboard_keyboard(session['is_admin']),
+        parse_mode=ParseMode.HTML)
 
 
 async def buy_menu_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Shows the menu for buying keys."""
     query = update.callback_query
     await query.answer()
     session = check_session(update.effective_user.id)
     if not session:
-        await query.edit_message_text("Your session has expired. Please /start again.", parse_mode=ParseMode.HTML)
+        await query.edit_message_text("Your session has expired. Please /start again.")
         return
 
-    text = "Please choose a subscription plan:"
-    await query.edit_message_text(text, reply_markup=get_buy_menu_keyboard())
-
-
-async def buy_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    query = update.callback_query
-    await query.answer()
-    plan_key = query.data.replace('buy_', '')
-    plan = PRICING.get(plan_key)
-
-    if not plan:
-        await query.edit_message_text("Invalid plan selected.", reply_markup=get_back_to_dashboard_keyboard())
-        return
-
-    session = check_session(update.effective_user.id)
-    if not session:
-        await query.edit_message_text("Your session has expired. Please /start again.", parse_mode=ParseMode.HTML)
-        return
-
-    user_balance = session['balance']
-    plan_price = plan['price']
-
-    text = f"""
-<b>Confirm Purchase</b>
-
-You are about to buy: <b>{plan['label']}</b>
-Cost: <b>${plan_price:.2f}</b>
-
-Your current balance is <b>${user_balance:.2f}</b>.
-"""
-
-    if user_balance >= plan_price:
-        text += "\nDo you want to proceed with the purchase from your balance?"
-        await query.edit_message_text(text,
-                                      reply_markup=get_confirmation_keyboard(plan_key),
-                                      parse_mode=ParseMode.HTML)
-    else:
-        text += f"""
-\n⚠️ You have insufficient balance.
-Please add funds to your account by sending USDT (TRC20) to the address below.
-
-Your deposit address:
-`{USDT_ADDRESS}`
-
-After sending, please contact an admin to have your balance updated.
-"""
-        await query.edit_message_text(text,
-                                      reply_markup=get_back_to_dashboard_keyboard(),
-                                      parse_mode=ParseMode.HTML)
-
-
-async def confirm_purchase_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    query = update.callback_query
-    await query.answer()
-    plan_key = query.data.replace('confirm_', '')
-    plan = PRICING.get(plan_key)
-
-    if not plan:
-        await query.edit_message_text("Invalid plan selected.", reply_markup=get_back_to_dashboard_keyboard())
-        return
-
-    session = check_session(update.effective_user.id)
-    if not session:
-        await query.edit_message_text("Your session has expired. Please /start again.", parse_mode=ParseMode.HTML)
-        return
-
-    user_id = session['user_id']
-    user_balance = session['balance']
-    plan_price = plan['price']
-    duration_days = plan['days']
-
-    if user_balance < plan_price:
-        await query.edit_message_text("Error: Insufficient balance.", reply_markup=get_back_to_dashboard_keyboard())
-        return
-
-    key_record = None
-    if STOCK_MODE:
-        key_record = get_available_key(duration_days)
-        if not key_record:
-            await query.edit_message_text("❌ Sorry, this item is currently out of stock. Please contact an admin.",
-                                          reply_markup=get_back_to_dashboard_keyboard())
-            return
-
-    # Process the purchase
-    update_balance(user_id, -plan_price, 'purchase', f"Purchase of {plan['label']}")
-    
-    if STOCK_MODE and key_record:
-        sold_key_info = sell_key(key_record['id'], user_id)
-        record_purchase(user_id, key_record['id'], plan_price, duration_days)
-        key_value = sold_key_info['key_value']
-    else:
-        # In non-stock mode, you would have a different logic to grant access.
-        # For now, we'll just confirm the purchase.
-        key_value = "ACCESS GRANTED (auto)"
-
-    text = f"""
-✅ <b>Purchase Successful!</b>
-
-Thank you for your purchase of <b>{plan['label']}</b>.
-
-Your access key is:
-`{key_value}`
-
-This key has been activated on your account.
-"""
+    text = f"🔑 <b>Buy Access</b>\n\nYour current balance: <b>${session['balance']:.2f}</b>\n\nPlease select a plan:"
     await query.edit_message_text(text,
-                                  reply_markup=get_back_to_dashboard_keyboard(),
+                                  reply_markup=get_buy_menu_keyboard(),
                                   parse_mode=ParseMode.HTML)
 
 
-async def balance_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def buy_key_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handles the user selecting a specific key plan to buy."""
+    query = update.callback_query
+    await query.answer()
+    plan_key = query.data.split('_')[-1]
+    plan = PRICING.get(plan_key)
+
+    session = check_session(update.effective_user.id)
+    if not session or not plan:
+        await query.edit_message_text("An error occurred. Please try again.",
+                                      reply_markup=get_back_to_dashboard_keyboard())
+        return
+
+    user_balance = session['balance']
+    plan_price = plan['price']
+
+    if user_balance < plan_price:
+        await query.edit_message_text(
+            f"❌ <b>Insufficient Funds</b>\n\nYour balance is ${user_balance:.2f}, but you need ${plan_price:.2f} for this plan.",
+            reply_markup=get_back_to_dashboard_keyboard(),
+            parse_mode=ParseMode.HTML)
+        return
+
+    if STOCK_MODE:
+        key = get_available_key(plan['days'])
+        if not key:
+            await query.edit_message_text(
+                "❌ <b>Out of Stock</b>\n\nWe are currently out of stock for this plan. Please check back later.",
+                reply_markup=get_back_to_dashboard_keyboard(),
+                parse_mode=ParseMode.HTML)
+            return
+
+    # Store data for confirmation step
+    context.user_data['purchase_plan'] = plan
+
+    text = f"❓ <b>Confirm Purchase</b>\n\nYou are about to buy <b>{plan['label']}</b> for <b>${plan_price:.2f}</b>.\n\nYour remaining balance will be <b>${user_balance - plan_price:.2f}</b>."
+    await query.edit_message_text(text,
+                                  reply_markup=get_confirmation_keyboard(),
+                                  parse_mode=ParseMode.HTML)
+
+
+async def confirm_purchase_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Confirms and finalizes the key purchase."""
+    query = update.callback_query
+    await query.answer()
+    plan = context.user_data.get('purchase_plan')
+    session = check_session(update.effective_user.id)
+
+    if not session or not plan:
+        await query.edit_message_text("An error occurred or your session expired. Please try again.",
+                                      reply_markup=get_back_to_dashboard_keyboard())
+        return
+
+    key = get_available_key(plan['days']) if STOCK_MODE else {'id': None, 'key_value': 'Unlimited'}
+
+    if STOCK_MODE and not key:
+        await query.edit_message_text(
+            "❌ <b>Out of Stock</b>\n\nSomeone else purchased the last key just before you. Please try again.",
+            reply_markup=get_back_to_dashboard_keyboard(), parse_mode=ParseMode.HTML)
+        return
+
+    # Finalize purchase
+    key_info = sell_key(key['id'], session['user_id'])
+    update_balance(session['user_id'], -plan['price'], 'purchase', f"Purchase of {plan['label']} key")
+    record_purchase(session['user_id'], key['id'], plan['price'], plan['days'])
+    new_balance = get_user_balance(session['user_id'])
+
+    # --- NEW: Simplified confirmation message ---
+    final_message = f"""
+✅ <b>Purchase Successful!</b>
+
+Your access key has been generated and applied to your account.
+
+Key: <code>{html.escape(key_info['key_value'])}</code>
+Duration: {key_info['duration_days']} days
+
+Your new balance is <b>${new_balance:.2f}</b>.
+"""
+    await query.edit_message_text(
+        text=final_message,
+        parse_mode=ParseMode.HTML,
+        reply_markup=get_back_to_dashboard_keyboard() # Re-use the back button
+    )
+    context.user_data.clear()
+
+
+async def add_balance_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Shows instructions for adding balance by contacting the admin."""
     query = update.callback_query
     await query.answer()
     session = check_session(update.effective_user.id)
     if not session:
-        await query.edit_message_text("Your session has expired. Please /start again.", parse_mode=ParseMode.HTML)
+        await query.edit_message_text("Your session has expired. Please /start again.")
         return
-        
+    
+    # --- NEW: "Contact Admin" message ---
     text = f"""
-💰 <b>Your Balance</b>
+💰 <b>Add Balance</b>
 
-Your current balance is: <b>${session['balance']:.2f}</b>
+To add balance to your account, please contact the admin directly on Telegram for assistance.
 
-To add funds, please send USDT (TRC20) to the address below and contact an admin.
+Admin: <b>{ADMIN_CONTACT_USERNAME}</b>
 
-Deposit address:
-`{USDT_ADDRESS}`
+They will help you with the payment process.
     """
     await query.edit_message_text(text,
                                   reply_markup=get_back_to_dashboard_keyboard(),
                                   parse_mode=ParseMode.HTML)
 
 
-async def history_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    query = update.callback_query
-    await query.answer()
-    # This is a placeholder. A real implementation would query the 'purchases' table.
-    text = "<b>Purchase History</b>\n\n- 1 Month Subscription - 2024-01-15\n- 7 Day Subscription - 2023-12-20"
-    await query.edit_message_text(text,
-                                  reply_markup=get_back_to_dashboard_keyboard(),
-                                  parse_mode=ParseMode.HTML)
-
-async def ipa_link_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def download_ipa_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Provides the IPA download link."""
     query = update.callback_query
     await query.answer()
     session = check_session(update.effective_user.id)
     if not session:
-        await query.edit_message_text("Your session has expired. Please /start again.", parse_mode=ParseMode.HTML)
+        await query.edit_message_text("Your session has expired. Please /start again.")
         return
 
     ipa_link = get_setting('ipa_download_link')
-    if ipa_link:
-        text = f"🔗 Here is the IPA download link:\n\n{ipa_link}"
+    if not ipa_link:
+        text = "The download link is not set yet. Please check back later."
     else:
-        text = "⚠️ The IPA download link has not been set by the admin yet."
+        text = f"⬇️ Here is your download link:\n\n{ipa_link}"
 
-    await query.edit_message_text(text, reply_markup=get_back_to_dashboard_keyboard(), parse_mode=ParseMode.HTML)
+    await query.edit_message_text(text,
+                                  reply_markup=get_back_to_dashboard_keyboard(),
+                                  disable_web_page_preview=True)

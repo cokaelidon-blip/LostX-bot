@@ -1,15 +1,15 @@
 # handlers/admin.py
 import html
 import logging
+import telegram # <-- Import telegram to access error types
 from telegram import Update
 from telegram.ext import ContextTypes, ConversationHandler
 from telegram.constants import ParseMode
 
 from database import (get_all_users_paged, get_key_stock, get_bot_stats,
                       create_user, get_user_by_username, update_balance,
-                      set_setting, bulk_add_keys,
-                      toggle_user_active_status, reset_user_device_id,
-                      delete_user_by_username) # <-- Import new function
+                      set_setting, bulk_add_keys, get_user_by_telegram_id,
+                      delete_user_by_username)
 from keyboards import (get_admin_panel_keyboard, get_admin_users_keyboard,
                        get_admin_keys_keyboard, get_cancel_admin_action_keyboard,
                        get_bulk_add_duration_keyboard)
@@ -17,7 +17,7 @@ from config import ADMIN_IDS
 
 # Conversation states
 (CREATE_USER_USERNAME, CREATE_USER_PASSWORD, ADD_BALANCE_USERNAME, ADD_BALANCE_AMOUNT,
- SET_IPA_LINK, SELECT_KEY_DURATION, RECEIVE_KEYS_LIST, REMOVE_USER_USERNAME) = range(10, 18) # <-- Added new state
+ SET_IPA_LINK, SELECT_KEY_DURATION, RECEIVE_KEYS_LIST, REMOVE_USER_USERNAME) = range(10, 18)
 
 # --- Main Admin Panel ---
 async def admin_panel_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -42,15 +42,25 @@ async def admin_users_callback(update: Update, context: ContextTypes.DEFAULT_TYP
 async def admin_keys_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
-    await query.edit_message_text("🔑 *Key Management*", reply_markup=get_admin_keys_keyboard(), parse_mode=ParseMode.MARKDOWN)
+    try:
+        await query.edit_message_text("🔑 *Key Management*", reply_markup=get_admin_keys_keyboard(), parse_mode=ParseMode.MARKDOWN)
+    except telegram.error.BadRequest as e:
+        if "Message is not modified" not in str(e):
+            raise
 
 async def view_stock_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
-    await query.answer()
     stock = get_key_stock()
     stock_text = "\n".join([f"• {item['duration_days']}-Day Keys: {item['count']}" for item in stock]) if stock else "No keys in stock."
     text = f"📦 *Key Stock*\n\n{stock_text}"
-    await query.edit_message_text(text, reply_markup=get_admin_keys_keyboard(), parse_mode=ParseMode.MARKDOWN)
+    try:
+        await query.edit_message_text(text, reply_markup=get_admin_keys_keyboard(), parse_mode=ParseMode.MARKDOWN)
+        await query.answer()
+    except telegram.error.BadRequest as e:
+        if "Message is not modified" in str(e):
+            await query.answer("Stock levels are unchanged.")
+        else:
+            raise
 
 # --- Bot Statistics ---
 async def admin_stats_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -75,7 +85,7 @@ async def cancel_admin_action(update: Update, context: ContextTypes.DEFAULT_TYPE
         await update.message.reply_text("Action cancelled.", reply_markup=get_admin_panel_keyboard())
     return ConversationHandler.END
 
-# --- Conversation: Create User ---
+# --- Conversations (No changes needed below this line) ---
 async def admin_create_user_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     await update.callback_query.answer()
     await update.callback_query.edit_message_text("Enter username for new user:", reply_markup=get_cancel_admin_action_keyboard())
@@ -95,7 +105,6 @@ async def create_user_password(update: Update, context: ContextTypes.DEFAULT_TYP
     await update.message.reply_text("Returning to admin panel...", reply_markup=get_admin_panel_keyboard())
     return ConversationHandler.END
 
-# --- Conversation: Add Balance ---
 async def admin_add_balance_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     await update.callback_query.answer()
     await update.callback_query.edit_message_text("Enter username to add balance to:", reply_markup=get_cancel_admin_action_keyboard())
@@ -123,7 +132,6 @@ async def add_balance_amount(update: Update, context: ContextTypes.DEFAULT_TYPE)
     await update.message.reply_text("Returning to admin panel...", reply_markup=get_admin_panel_keyboard())
     return ConversationHandler.END
 
-# --- Conversation: Set IPA Link ---
 async def admin_set_link_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     await update.callback_query.answer()
     await update.callback_query.edit_message_text("Send the new IPA download link:", reply_markup=get_cancel_admin_action_keyboard())
@@ -134,7 +142,6 @@ async def admin_receive_new_link(update: Update, context: ContextTypes.DEFAULT_T
     await update.message.reply_text("✅ IPA link updated.", reply_markup=get_admin_panel_keyboard())
     return ConversationHandler.END
 
-# --- Conversation: Bulk Add Keys (FIXED) ---
 async def admin_add_keys_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     await update.callback_query.answer()
     await update.callback_query.edit_message_text("Select the duration for the keys you are adding:", reply_markup=get_bulk_add_duration_keyboard())
@@ -150,7 +157,6 @@ async def select_key_duration(update: Update, context: ContextTypes.DEFAULT_TYPE
 
 async def receive_keys_list(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     duration = context.user_data['bulk_add_duration']
-    # Sanitize keys: remove whitespace and ignore empty lines
     keys = [k.strip() for k in update.message.text.split('\n') if k.strip()]
     
     if not keys:
@@ -162,7 +168,6 @@ async def receive_keys_list(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     context.user_data.clear()
     return ConversationHandler.END
 
-# --- Conversation: Remove User (NEW) ---
 async def admin_remove_user_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     query = update.callback_query
     await query.answer()
@@ -174,8 +179,6 @@ async def admin_remove_user_start(update: Update, context: ContextTypes.DEFAULT_
 
 async def remove_user_username(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     username_to_delete = update.message.text
-    
-    # Simple self-deletion check
     session_user = get_user_by_telegram_id(update.effective_user.id)
     if session_user and session_user['username'] == username_to_delete:
         await update.message.reply_text("You cannot delete your own account. Action cancelled.", reply_markup=get_admin_users_keyboard())

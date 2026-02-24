@@ -21,13 +21,7 @@ def init_database():
         c = conn.cursor()
         c.execute("PRAGMA foreign_keys = ON;")
 
-        # Add telegram_id column if it doesn't exist
-        try:
-            c.execute("ALTER TABLE users ADD COLUMN telegram_id INTEGER UNIQUE")
-            logging.info("Column 'telegram_id' added to 'users' table.")
-        except sqlite3.OperationalError:
-            pass  # Column already exists
-
+        # This is the corrected table creation.
         c.execute('''
             CREATE TABLE IF NOT EXISTS users (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -36,10 +30,10 @@ def init_database():
                 balance REAL DEFAULT 0.0,
                 device_id TEXT,
                 is_active BOOLEAN DEFAULT 1,
-                is_admin BOOLEAN DEFAULT 0
+                is_admin BOOLEAN DEFAULT 0,
+                telegram_id INTEGER UNIQUE
             )
         ''')
-        # The ALTER TABLE command for telegram_id is above
 
         c.execute('''
             CREATE TABLE IF NOT EXISTS license_keys (
@@ -122,7 +116,6 @@ def check_session(telegram_id):
         session = conn.execute('SELECT * FROM sessions WHERE user_id = ?', (user_id,)).fetchone()
 
         if session:
-            # Session exists, return user info
             return user
         return None
     finally:
@@ -134,7 +127,6 @@ def create_session(user_id):
     try:
         token = str(uuid.uuid4())
         expiry = datetime.now() + timedelta(hours=SESSION_LIFETIME_HOURS)
-        # Use INSERT OR REPLACE to handle logins on new devices, invalidating the old session.
         conn.execute('INSERT OR REPLACE INTO sessions (session_token, user_id, expiry_date) VALUES (?, ?, ?)',
                      (token, user_id, expiry))
         conn.commit()
@@ -169,16 +161,14 @@ def promote_user_to_admin(telegram_id):
         logging.error(f"Failed to promote user {telegram_id} to admin: {e}")
         return False
 
-# --- All other functions from the previous version remain the same ---
-# (create_user, get_user_by_username, get_all_users_paged, update_balance, etc.)
-
 def create_user(username, password, is_admin=False):
     """Creates a new user with a hashed password."""
     password_hash = bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt())
     conn = get_db_connection()
     try:
         with conn:
-            conn.execute(
+            cur = conn.cursor()
+            cur.execute(
                 'INSERT INTO users (username, password_hash, is_admin) VALUES (?, ?, ?)',
                 (username, password_hash.decode('utf-8'), 1 if is_admin else 0)
             )
@@ -189,7 +179,6 @@ def create_user(username, password, is_admin=False):
         conn.close()
 
 def get_user_by_username(username):
-    """Retrieves a user by their username without password check."""
     conn = get_db_connection()
     try:
         user = conn.execute('SELECT * FROM users WHERE username = ?', (username,)).fetchone()

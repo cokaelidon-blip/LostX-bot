@@ -8,9 +8,7 @@ from telegram.ext import (Application, CommandHandler, CallbackQueryHandler,
 import config
 from database import init_database
 from handlers.common import (start, login_start, login_username,
-                             login_password, register_start,
-                             register_username, register_password,
-                             cancel_login, logout_callback, unknown_command)
+                             login_password, cancel_login, logout_callback, unknown_command)
 from handlers.user import (dashboard_callback, modder_ipa_callback,
                            buy_menu_callback, buy_callback,
                            confirm_purchase_callback, balance_callback,
@@ -59,15 +57,6 @@ def main() -> None:
         fallbacks=[CommandHandler('cancel', cancel_login)],
         per_message=False)
 
-    register_conv = ConversationHandler(
-        entry_points=[CallbackQueryHandler(register_start, pattern='^register$')],
-        states={
-            1: [MessageHandler(filters.TEXT & ~filters.COMMAND, register_username)],
-            2: [MessageHandler(filters.TEXT & ~filters.COMMAND, register_password)],
-        },
-        fallbacks=[CommandHandler('cancel', cancel_login)],
-        per_message=False)
-    
     create_user_conv = ConversationHandler(
         entry_points=[CallbackQueryHandler(admin_create_user_callback, pattern='^admin_create_user$')],
         states={
@@ -104,7 +93,6 @@ def main() -> None:
         per_message=False)
 
     application.add_handler(login_conv)
-    application.add_handler(register_conv)
     application.add_handler(create_user_conv)
     application.add_handler(add_balance_conv)
     application.add_handler(set_link_conv)

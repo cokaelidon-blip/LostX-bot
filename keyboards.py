@@ -21,7 +21,8 @@ def get_dashboard_keyboard(is_admin=False):
 def get_ipa_menu_keyboard():
     """Keyboard for the IPA menu, shown after clicking 'Modder IPA Menu'."""
     keyboard = [
-        [InlineKeyboardButton("🛒 Buy Access Key", callback_data='buy_key_menu')],
+        # --- THIS IS THE CHANGE ---
+        [InlineKeyboardButton("🛒 Buy key", callback_data='buy_key_menu')],
         [InlineKeyboardButton("⬇️ Download IPA", callback_data='download_ipa')],
         [InlineKeyboardButton("⬅️ Back to Dashboard", callback_data='back_to_dashboard')]
     ]
@@ -30,6 +31,7 @@ def get_ipa_menu_keyboard():
 def get_buy_key_keyboard():
     """Generates a keyboard with all available pricing plans."""
     keyboard = []
+    # Buttons are now generated based on the PRICING dictionary in config.py
     for plan_id, details in PRICING.items():
         button_text = f"{details['label']} - ${details['price']:.2f}"
         keyboard.append([InlineKeyboardButton(button_text, callback_data=f'buy_{plan_id}')])

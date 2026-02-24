@@ -5,14 +5,11 @@ from telegram.ext import (Application, CommandHandler, CallbackQueryHandler,
 
 import config
 from database import init_database
-# --- CORRECTED: Added imports for conversation states ---
 from handlers.common import (start, login_start, login_username, login_password,
                            cancel_login, logout_callback, unknown_command,
                            USERNAME, PASSWORD)
-from handlers.user import (dashboard_callback, download_ipa_callback,
-                         buy_menu_callback, buy_key_callback,
-                         confirm_purchase_callback, add_balance_callback)
-# --- CORRECT_ED: Added imports for conversation states ---
+# --- CORRECTED: Removed imports for deleted buy functions ---
+from handlers.user import (dashboard_callback, download_ipa_callback, add_balance_callback)
 from handlers.admin import (admin_panel_callback, admin_users_callback, admin_keys_callback,
                           view_stock_callback, admin_stats_callback, cancel_admin_action,
                           admin_create_user_callback, create_user_username, create_user_password,
@@ -36,11 +33,9 @@ logging.getLogger("telegram.ext.Application").setLevel(logging.INFO)
 
 def main() -> None:
     """Start the bot."""
-    # Initialize the database
     init_database()
     logging.info("Database initialized successfully.")
 
-    # Create the Application and pass it your bot's token.
     application = Application.builder().token(config.BOT_TOKEN).build()
 
     # --- Conversation Handlers ---
@@ -85,7 +80,7 @@ def main() -> None:
         entry_points=[CallbackQueryHandler(add_custom_keys_start, pattern='^admin_add_custom_keys$')],
         states={
             SELECT_KEY_DURATION: [CallbackQueryHandler(select_key_duration, pattern='^add_keys_duration_')],
-            RECEIVE_KEYS_LIST: [MessageHandler(filters.TEXT & ~filters.COMMAND, receive_keys_list)],
+            RECEIVE_KEYS_list: [MessageHandler(filters.TEXT & ~filters.COMMAND, receive_keys_list)],
         },
         fallbacks=[CallbackQueryHandler(cancel_bulk_add, pattern='^cancel_bulk_add$')],
     )
@@ -105,11 +100,10 @@ def main() -> None:
     # --- Callback Query Handlers (User) ---
     application.add_handler(CallbackQueryHandler(logout_callback, pattern='^logout$'))
     application.add_handler(CallbackQueryHandler(dashboard_callback, pattern='^back_to_dashboard$'))
-    application.add_handler(CallbackQueryHandler(buy_menu_callback, pattern='^buy_keys$'))
     application.add_handler(CallbackQueryHandler(add_balance_callback, pattern='^add_balance$'))
     application.add_handler(CallbackQueryHandler(download_ipa_callback, pattern='^download_ipa$'))
-    application.add_handler(CallbackQueryHandler(buy_key_callback, pattern='^buy_plan_'))
-    application.add_handler(CallbackQueryHandler(confirm_purchase_callback, pattern='^confirm_purchase$'))
+    
+    # --- REMOVED HANDLERS FOR BUYING KEYS ---
 
     # --- Callback Query Handlers (Admin) ---
     application.add_handler(CallbackQueryHandler(admin_panel_callback, pattern='^admin_panel$'))
@@ -117,12 +111,11 @@ def main() -> None:
     application.add_handler(CallbackQueryHandler(admin_keys_callback, pattern='^admin_keys$'))
     application.add_handler(CallbackQueryHandler(admin_stats_callback, pattern='^admin_stats$'))
     application.add_handler(CallbackQueryHandler(view_stock_callback, pattern='^view_stock$'))
-    application.add_handler(CallbackQueryHandler(cancel_admin_action, pattern='^cancel_admin_action$')) # General cancel
+    application.add_handler(CallbackQueryHandler(cancel_admin_action, pattern='^cancel_admin_action$'))
 
     # --- Fallback for unknown commands ---
     application.add_handler(MessageHandler(filters.COMMAND, unknown_command))
 
-    # Run the bot until the user presses Ctrl-C
     logging.info("Starting Modder IPA Bot...")
     application.run_polling()
 

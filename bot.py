@@ -1,33 +1,33 @@
 # bot.py
 import logging
-from telegram.ext import (Application, CommandHandler, CallbackQueryHandler,
-                          ConversationHandler, MessageHandler, filters)
-
 import config
+from telegram.ext import (Application, CommandHandler, ConversationHandler, 
+                          CallbackQueryHandler, MessageHandler, filters)
+
 from database import init_database
-from handlers.common import (start, login_start, login_username, login_password,
+
+# Import handlers from their respective files
+from handlers.common import (start, login_start, login_username, login_password, 
                            cancel_login, logout_callback, unknown_command,
                            USERNAME, PASSWORD)
-from handlers.user import *
-from handlers.admin import *
+from handlers.user import * # Import all user-facing handlers
+from handlers.admin import * # Import all admin-facing handlers
 
-# Set up logging
-logging.basicConfig(
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    level=logging.INFO)
+# --- Logging Setup ---
+logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
 logging.getLogger("httpx").setLevel(logging.WARNING)
 
 def main() -> None:
-    """Start the bot."""
+    """Run the bot."""
+    # Initialize the database first
     init_database()
-    logging.info("Database initialized successfully.")
-
+    
+    # Create the Application and pass it your bot's token.
     application = Application.builder().token(config.BOT_TOKEN).build()
 
-    # Define a single cancel handler for all admin conversations
-    cancel_handler = CallbackQueryHandler(cancel_admin_action, pattern='^cancel_admin_action$')
-
     # --- Conversation Handlers ---
+    
+    # Login conversation
     login_conv = ConversationHandler(
         entry_points=[CallbackQueryHandler(login_start, pattern='^login$')],
         states={
@@ -35,87 +35,95 @@ def main() -> None:
             PASSWORD: [MessageHandler(filters.TEXT & ~filters.COMMAND, login_password)],
         },
         fallbacks=[CommandHandler('cancel', cancel_login)],
+        per_message=False
     )
     
+    # Admin: Create User conversation
     create_user_conv = ConversationHandler(
-        entry_points=[CallbackQueryHandler(admin_create_user_callback, pattern='^admin_create_user$')],
+        entry_points=[CallbackQueryHandler(admin_create_user_start, pattern='^admin_create_user$')],
         states={
-            CREATE_USER_USERNAME: [MessageHandler(filters.TEXT & ~filters.COMMAND, create_user_username)],
-            CREATE_USER_PASSWORD: [MessageHandler(filters.TEXT & ~filters.COMMAND, create_user_password)],
+            A_USERNAME: [MessageHandler(filters.TEXT & ~filters.COMMAND, admin_receive_username)],
+            A_PASSWORD: [MessageHandler(filters.TEXT & ~filters.COMMAND, admin_receive_password)],
         },
-        fallbacks=[cancel_handler],
-        conversation_timeout=60
+        fallbacks=[CallbackQueryHandler(cancel_admin_action, pattern='^cancel_admin_action$')],
+        per_message=False
     )
 
+    # Admin: Add Balance conversation
     add_balance_conv = ConversationHandler(
-        entry_points=[CallbackQueryHandler(admin_add_balance_callback, pattern='^admin_add_balance$')],
+        entry_points=[CallbackQueryHandler(admin_add_balance_start, pattern='^admin_add_balance$')],
         states={
-            ADD_BALANCE_USERNAME: [MessageHandler(filters.TEXT & ~filters.COMMAND, add_balance_username)],
-            ADD_BALANCE_AMOUNT: [MessageHandler(filters.TEXT & ~filters.COMMAND, add_balance_amount)],
+            A_GET_USERNAME_BALANCE: [MessageHandler(filters.TEXT & ~filters.COMMAND, admin_receive_username_for_balance)],
+            A_GET_AMOUNT: [MessageHandler(filters.TEXT & ~filters.COMMAND, admin_receive_amount)],
         },
-        fallbacks=[cancel_handler],
-        conversation_timeout=60
+        fallbacks=[CallbackQueryHandler(cancel_admin_action, pattern='^cancel_admin_action$')],
+        per_message=False
     )
-
+    
+    # Admin: Set IPA Link conversation
     set_link_conv = ConversationHandler(
-        entry_points=[CallbackQueryHandler(admin_set_link_start, pattern='^admin_set_ipa_link$')],
-        states={SET_IPA_LINK: [MessageHandler(filters.TEXT & ~filters.COMMAND, admin_receive_new_link)]},
-        fallbacks=[cancel_handler],
-        conversation_timeout=60
+        entry_points=[CallbackQueryHandler(admin_set_ipa_link_start, pattern='^admin_set_ipa_link$')],
+        states={A_GET_LINK: [MessageHandler(filters.TEXT & ~filters.COMMAND, admin_receive_ipa_link)]},
+        fallbacks=[CallbackQueryHandler(cancel_admin_action, pattern='^cancel_admin_action$')],
+        per_message=False
     )
 
+    # Admin: Add Keys conversation
     add_keys_conv = ConversationHandler(
         entry_points=[CallbackQueryHandler(admin_add_keys_start, pattern='^admin_add_keys$')],
         states={
-            SELECT_KEY_DURATION: [CallbackQueryHandler(select_key_duration, pattern='^add_keys_for_')],
-            RECEIVE_KEYS_LIST: [MessageHandler(filters.TEXT & ~filters.COMMAND, receive_keys_list)],
+            A_CHOOSE_DURATION: [CallbackQueryHandler(admin_choose_key_duration, pattern='^add_keys_for_')],
+            A_GET_KEYS: [MessageHandler(filters.TEXT & ~filters.COMMAND, admin_receive_keys)],
         },
-        fallbacks=[cancel_handler],
-        conversation_timeout=120 
+        fallbacks=[CallbackQueryHandler(cancel_admin_action, pattern='^cancel_admin_action$')],
+        per_message=False
     )
 
+    # Admin: Remove User conversation
     remove_user_conv = ConversationHandler(
         entry_points=[CallbackQueryHandler(admin_remove_user_start, pattern='^admin_remove_user$')],
-        states={
-            REMOVE_USER_USERNAME: [MessageHandler(filters.TEXT & ~filters.COMMAND, remove_user_username)],
-        },
-        fallbacks=[cancel_handler],
-        conversation_timeout=60
+        states={A_GET_USERNAME_REMOVE: [MessageHandler(filters.TEXT & ~filters.COMMAND, admin_confirm_remove_user)]},
+        fallbacks=[CallbackQueryHandler(cancel_admin_action, pattern='^cancel_admin_action$')],
+        per_message=False
     )
 
-    # --- Add All Handlers ---
+    # --- Add all handlers to the application ---
     application.add_handler(CommandHandler("start", start))
-    
-    # Conversations
     application.add_handler(login_conv)
     application.add_handler(create_user_conv)
     application.add_handler(add_balance_conv)
     application.add_handler(set_link_conv)
     application.add_handler(add_keys_conv)
     application.add_handler(remove_user_conv)
-    
-    # User Callbacks
-    application.add_handler(CallbackQueryHandler(logout_callback, pattern='^logout$'))
-    application.add_handler(CallbackQueryHandler(dashboard_callback, pattern='^back_to_dashboard$'))
-    application.add_handler(CallbackQueryHandler(modder_ipa_menu_callback, pattern='^modder_ipa_menu$'))
-    application.add_handler(CallbackQueryHandler(buy_key_callback, pattern='^buy_plan_'))
-    application.add_handler(CallbackQueryHandler(download_ipa_callback, pattern='^download_ipa$'))
-    application.add_handler(CallbackQueryHandler(history_callback, pattern='^history$'))
-    application.add_handler(CallbackQueryHandler(check_balance_callback, pattern='^check_balance$'))
 
-    # Admin Callbacks
+    # --- Regular Callback Handlers ---
+    # THIS IS THE FIX: Using the correct function name 'back_to_dashboard_callback'
+    application.add_handler(CallbackQueryHandler(back_to_dashboard_callback, pattern='^back_to_dashboard$'))
+    application.add_handler(CallbackQueryHandler(logout_callback, pattern='^logout$'))
+
+    # User-facing menu callbacks
+    application.add_handler(CallbackQueryHandler(modder_ipa_menu_callback, pattern='^modder_ipa_menu$'))
+    application.add_handler(CallbackQueryHandler(download_ipa_callback, pattern='^download_ipa$'))
+    application.add_handler(CallbackQueryHandler(check_balance_callback, pattern='^check_balance$'))
+    application.add_handler(CallbackQueryHandler(history_callback, pattern='^history$'))
+    
+    # Purchase flow callbacks
+    application.add_handler(CallbackQueryHandler(buy_key_menu_callback, pattern='^buy_key_menu$'))
+    application.add_handler(CallbackQueryHandler(buy_key_callback, pattern='^buy_')) # Matches buy_plan_1, etc.
+
+    # Admin panel navigation
     application.add_handler(CallbackQueryHandler(admin_panel_callback, pattern='^admin_panel$'))
     application.add_handler(CallbackQueryHandler(admin_users_callback, pattern='^admin_users$'))
     application.add_handler(CallbackQueryHandler(admin_keys_callback, pattern='^admin_keys$'))
     application.add_handler(CallbackQueryHandler(admin_stats_callback, pattern='^admin_stats$'))
     application.add_handler(CallbackQueryHandler(view_stock_callback, pattern='^view_stock$'))
-    
-    # Fallback
+
+    # Fallback for unknown commands
     application.add_handler(MessageHandler(filters.COMMAND, unknown_command))
 
-    logging.info("Starting Modder IPA Bot...")
+    # Run the bot until the user presses Ctrl-C
+    print("Starting Modder IPA Bot...")
     application.run_polling()
 
-
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

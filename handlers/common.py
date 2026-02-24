@@ -4,9 +4,10 @@ from telegram import Update
 from telegram.ext import ContextTypes, ConversationHandler
 from telegram.constants import ParseMode
 
-from database import (check_session, authenticate_user, logout_user, promote_user_to_admin)
+from database import (check_session, authenticate_user, create_user, logout_user,
+                      promote_user_to_admin, get_user_by_telegram_id)
 from keyboards import get_start_keyboard, get_dashboard_keyboard
-from config import ADMIN_IDS
+from config import ADMIN_IDS, ADMIN_USERNAME, ADMIN_PASSWORD
 
 # States for login and register conversations
 USERNAME, PASSWORD = range(1, 3)
@@ -14,8 +15,24 @@ USERNAME, PASSWORD = range(1, 3)
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     telegram_id = update.effective_user.id
-    
-    # --- Check for admin promotion ---
+    user = get_user_by_telegram_id(telegram_id)
+
+    # --- NEW: Auto-create admin account if it doesn't exist ---
+    if not user and telegram_id in ADMIN_IDS:
+        if ADMIN_USERNAME and ADMIN_PASSWORD:
+            # Create the admin user
+            create_user(ADMIN_USERNAME, ADMIN_PASSWORD, is_admin=True)
+            # Now, authenticate to link the telegram_id and create a session
+            authenticate_user(ADMIN_USERNAME, ADMIN_PASSWORD, telegram_id)
+            await update.message.reply_text(
+                f"✅ Admin account '{ADMIN_USERNAME}' created and linked to you. Welcome!"
+            )
+        else:
+            await update.message.reply_text(
+                "⚠️ Admin user setup required. Please set ADMIN_USERNAME and ADMIN_PASSWORD in your environment variables."
+            )
+
+    # --- Check for admin promotion for existing users ---
     session = check_session(telegram_id)
     if session and telegram_id in ADMIN_IDS and not session['is_admin']:
         promote_user_to_admin(telegram_id)

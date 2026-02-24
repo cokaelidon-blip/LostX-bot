@@ -4,8 +4,10 @@ from telegram import Update
 from telegram.ext import ContextTypes, ConversationHandler
 from telegram.constants import ParseMode
 
-from database import check_session, authenticate_user, create_user, logout_user
+from database import (check_session, authenticate_user, create_user, logout_user,
+                      promote_user_to_admin) # <-- promote_user_to_admin added
 from keyboards import get_start_keyboard, get_dashboard_keyboard
+from config import ADMIN_IDS # <-- ADMIN_IDS imported
 
 # States for login and register conversations
 USERNAME, PASSWORD = range(1, 3)
@@ -13,7 +15,14 @@ USERNAME, PASSWORD = range(1, 3)
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     telegram_id = update.effective_user.id
+    
+    # --- Check for admin promotion ---
     session = check_session(telegram_id)
+    if session and telegram_id in ADMIN_IDS and not session['is_admin']:
+        promote_user_to_admin(telegram_id)
+        # Re-check session to get updated admin status
+        session = check_session(telegram_id)
+        await update.message.reply_text("✅ Admin privileges have been granted to this account.")
 
     if session:
         safe_username = html.escape(session['username'])
@@ -65,6 +74,10 @@ async def login_password(update: Update,
     success, result = authenticate_user(username, password, telegram_id)
 
     if success:
+        # --- Check for admin promotion right after login ---
+        if telegram_id in ADMIN_IDS:
+             promote_user_to_admin(telegram_id)
+
         session = check_session(telegram_id)
         safe_username = html.escape(session['username'])
         dashboard_text = f"""

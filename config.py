@@ -1,28 +1,41 @@
 # config.py
 import os
+from dotenv import load_dotenv
 
-# Bot Configuration
-BOT_TOKEN = os.environ.get('BOT_TOKEN', '')
+# Load environment variables from .env file for local development
+load_dotenv()
 
-# Admin Configuration
-ADMIN_USERNAME = os.environ.get('ADMIN_USERNAME', 'El1don_07')
+# --- Required Variables ---
+BOT_TOKEN = os.getenv('BOT_TOKEN')
+DATABASE_URL = os.getenv('DATABASE_URL')
+# Your unique numeric Telegram user ID
+# Can be a comma-separated list for multiple admins, e.g., "123,456"
+ADMIN_IDS_str = os.getenv('ADMIN_IDS', "")
+try:
+    ADMIN_IDS = [int(i.strip()) for i in ADMIN_IDS_str.split(',') if i]
+except ValueError:
+    print("Warning: ADMIN_IDS contains non-numeric values. Please check your environment variables.")
+    ADMIN_IDS = []
 
-# Multiple Admin IDs
-ADMIN_IDS_ENV = os.environ.get('ADMIN_IDS', '6180001609')
-ADMIN_IDS = [int(id.strip()) for id in ADMIN_IDS_ENV.split(',') if id.strip()]
+# --- Admin Account Auto-Creation (NEW) ---
+ADMIN_USERNAME = os.getenv('ADMIN_USERNAME')
+ADMIN_PASSWORD = os.getenv('ADMIN_PASSWORD')
 
-# Database - This will be provided by Railway
-DATABASE_URL = os.environ.get('DATABASE_URL', '') 
+# --- Optional / Customizable Variables ---
+# Address for users to send USDT (TRC20) to
+USDT_ADDRESS = os.getenv('USDT_ADDRESS', 'YOUR_USDT_TRC20_ADDRESS_HERE')
 
-# Pricing (in USD)
+# Set to True to enable stock checking, False to allow unlimited purchases
+STOCK_MODE = os.getenv('STOCK_MODE', 'True').lower() in ('true', '1', 't')
+
+# --- Pricing Configuration ---
+# You can add or remove plans here
+# The key (e.g., 'plan1') is used internally.
+# 'label' is what the user sees on the button.
+# 'days' is the duration of the key.
+# 'price' is the cost.
 PRICING = {
-    "1_day": {"days": 1, "price": 2, "label": "1 Day - $2"},
-    "7_days": {"days": 7, "price": 5, "label": "7 Days - $5"},
-    "1_month": {"days": 30, "price": 8, "label": "1 Month - $8"}
+    'plan1': {'label': '7 Days', 'days': 7, 'price': 5.00},
+    'plan2': {'label': '30 Days', 'days': 30, 'price': 15.00},
+    'plan3': {'label': '90 Days', 'days': 90, 'price': 30.00},
 }
-
-# Payment Configuration
-USDT_ADDRESS = os.environ.get('USDT_ADDRESS', 'YOUR_USDT_TRC20_ADDRESS_HERE')
-
-# Stock Mode: True = manual stock, False = auto-generate
-STOCK_MODE = True

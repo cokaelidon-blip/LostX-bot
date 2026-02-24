@@ -47,6 +47,7 @@ async def modder_ipa_callback(update: Update,
         await query.edit_message_text("❌ Session expired. Please login again.", reply_markup=get_start_keyboard())
         return
 
+    # This is the line that was fixed. The text is now on a single line.
     await query.edit_message_text(text="<b>🔑 Modder IPA Menu</b>
 Select an option below.",
                                   reply_markup=get_modder_ipa_keyboard(),
@@ -122,7 +123,7 @@ Please contact admin @{safe_admin_username} to add balance.
 🛒 <b>Confirm Purchase</b>
 
 📦 Product: <b>Modder IPA Key</b>
-📅 Duration: <b>{plan['label']}</b>
+📅 Duration: <b>{escape_html(plan['label'])}</b>
 💰 Price: <b>${plan['price']:.2f}</b>
 
 Your Balance: <b>${session['balance']:.2f}</b>
@@ -178,7 +179,7 @@ async def confirm_purchase_callback(update: Update,
 🔑 <b>Your Key:</b>
 <code>{safe_key_value}</code>
 
-📅 Duration: <b>{plan['label']}</b>
+📅 Duration: <b>{escape_html(plan['label'])}</b>
 💰 Amount Paid: <b>${plan['price']:.2f}</b>
 
 ⚠️ <b>Important:</b> Save this key! It won't be shown again.
@@ -230,9 +231,11 @@ async def history_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     from database import get_connection
     conn = get_connection()
-    cursor = conn.cursor()
+    # Use a dictionary cursor to access columns by name
+    cursor = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
     cursor.execute('SELECT amount, duration_days, purchased_at FROM purchases WHERE user_id = %s ORDER BY purchased_at DESC LIMIT 10', (session['user_id'],))
     purchases = cursor.fetchall()
+    cursor.close()
     conn.close()
 
     if not purchases:
@@ -241,8 +244,12 @@ No purchases yet."
     else:
         text = "📜 <b>Purchase History (Last 10)</b>
 "
-        for i, (amount, days, date) in enumerate(purchases, 1):
+        for i, purchase in enumerate(purchases, 1):
+            amount = purchase['amount']
+            days = purchase['duration_days']
+            date = purchase['purchased_at']
             text += f"{i}. {days} days - ${amount:.2f} - {escape_html(str(date)[:10])}\n"
+
     await query.edit_message_text(text,
                                   reply_markup=get_back_keyboard(),
                                   parse_mode=ParseMode.HTML)

@@ -1,257 +1,244 @@
 # database.py
 import sqlite3
 import hashlib
-import os
-import config # <-- IMPORT CONFIG TO ACCESS ADMIN CREDENTIALS
+import logging
+import datetime
+from config import ADMIN_USERNAME, ADMIN_PASSWORD, ADMIN_IDS # --- FIX 1: Import ADMIN_IDS
 
-# This is the correct, permanent path. Do not change.
-DATABASE_URL = '/data/bot_database.db'
+# --- Database Setup ---
+DB_NAME = 'bot_database.db'
+SESSIONS = {} # In-memory session storage
 
-# --- Database Connection ---
 def get_db_connection():
     """Establishes a connection to the SQLite database."""
-    conn = sqlite3.connect(DATABASE_URL)
+    conn = sqlite3.connect(DB_NAME, check_same_thread=False)
     conn.row_factory = sqlite3.Row
     return conn
 
-def init_database():
-    """Initializes the database, creates tables, and creates the initial admin user if needed."""
-    print("Checking/creating database tables...")
-    conn = get_db_connection()
-    # Create tables if they don't exist
-    conn.executescript('''
-        CREATE TABLE IF NOT EXISTS users (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            username TEXT UNIQUE NOT NULL,
-            password_hash TEXT NOT NULL,
-            balance REAL DEFAULT 0.0,
-            is_admin BOOLEAN DEFAULT FALSE,
-            is_active BOOLEAN DEFAULT TRUE,
-            device_id TEXT,
-            telegram_id INTEGER UNIQUE
-        );
-        CREATE TABLE IF NOT EXISTS license_keys (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            key TEXT UNIQUE NOT NULL,
-            duration_days INTEGER NOT NULL,
-            is_used BOOLEAN DEFAULT FALSE,
-            user_id INTEGER,
-            activation_date TEXT,
-            FOREIGN KEY (user_id) REFERENCES users(id)
-        );
-        CREATE TABLE IF NOT EXISTS sessions (
-            telegram_id INTEGER PRIMARY KEY,
-            user_id INTEGER NOT NULL,
-            username TEXT NOT NULL,
-            login_time TEXT DEFAULT CURRENT_TIMESTAMP,
-            FOREIGN KEY (user_id) REFERENCES users(id)
-        );
-        CREATE TABLE IF NOT EXISTS settings (
-            key TEXT PRIMARY KEY,
-            value TEXT
-        );
-    ''')
-    print("Database tables checked/created successfully.")
-
-    # ---------------------------------------------------------------- #
-    # --- THIS IS THE CRITICAL LOGIC THAT WAS MISSING --- #
-    # ---------------------------------------------------------------- #
-    try:
-        cursor = conn.cursor()
-        # Check if any users exist in the database
-        cursor.execute("SELECT COUNT(*) FROM users")
-        user_count = cursor.fetchone()[0]
-
-        # If the database is new (0 users) AND the admin credentials are set in the environment
-        if user_count == 0 and config.ADMIN_USERNAME and config.ADMIN_PASSWORD:
-            print(f"--- NO USERS FOUND ---")
-            print(f"Creating initial admin user '{config.ADMIN_USERNAME}' from environment variables...")
-            
-            password_hash = hash_password(config.ADMIN_PASSWORD)
-            conn.execute(
-                'INSERT INTO users (username, password_hash, is_admin, is_active) VALUES (?, ?, ?, ?)',
-                (config.ADMIN_USERNAME, password_hash, True, True)
-            )
-            conn.commit()
-            print("✅ Initial admin user created successfully.")
-        
-    except sqlite3.Error as e:
-        print(f"❌ Error during initial admin user creation: {e}")
-    finally:
-        # We always close the connection after we're done.
-        conn.close()
-    
-    print("Database initialization process complete.")
-    # ---------------------------------------------------------------- #
-
-# --- Utility Functions ---
-def hash_password(password):
+def hash_password(password: str) -> str:
+    """Hashes a password using SHA-256."""
     return hashlib.sha256(password.encode()).hexdigest()
 
+def init_database():
+    """Initializes the database tables and creates the primary admin user if they don't exist."""
+    logging.info("Checking/creating database tables...")
+    conn = get_db_connection()
+    c = conn.cursor()
+    # Create tables
+    c.execute('''CREATE TABLE IF NOT EXISTS users (
+                    id INTEGER PRIMARY KEY,
+                    telegram_id INTEGER UNIQUE,
+                    username TEXT UNIQUE NOT NULL,
+                    password_hash TEXT NOT NULL,
+                    balance REAL DEFAULT 0.0,
+                    is_admin INTEGER DEFAULT 0
+                )''')
+    c.execute('''CREATE TABLE IF NOT EXISTS keys (
+                    id INTEGER PRIMARY KEY,
+                    key TEXT UNIQUE NOT NULL,
+                    duration_days INTEGER NOT NULL,
+                    is_used INTEGER DEFAULT 0,
+                    user_id INTEGER,
+                    activation_date TEXT,
+                    FOREIGN KEY (user_id) REFERENCES users (id)
+                )''')
+    c.execute('''CREATE TABLE IF NOT EXISTS settings (
+                    key TEXT PRIMARY KEY,
+                    value TEXT
+                )''')
+    
+    # Create the primary admin user from environment variables if they don't exist
+    if ADMIN_USERNAME and ADMIN_PASSWORD:
+        c.execute("SELECT id FROM users WHERE username = ?", (ADMIN_USERNAME,))
+        if c.fetchone() is None:
+            c.execute("INSERT INTO users (username, password_hash, is_admin) VALUES (?, ?, ?)",
+                      (ADMIN_USERNAME, hash_password(ADMIN_PASSWORD), 1))
+            logging.info(f"Primary admin user '{ADMIN_USERNAME}' created.")
+            
+    conn.commit()
+    conn.close()
+    logging.info("Database tables checked/created successfully.")
+    logging.info("Database initialization process complete.")
+
 # --- Session Management ---
-def create_session(telegram_id, user):
-    conn = get_db_connection()
-    conn.execute('DELETE FROM sessions WHERE telegram_id = ?', (telegram_id,))
-    conn.execute('INSERT INTO sessions (telegram_id, user_id, username) VALUES (?, ?, ?)',
-                 (telegram_id, user['id'], user['username']))
-    conn.commit()
-    conn.close()
 
-def check_session(telegram_id):
-    conn = get_db_connection()
-    session_data = conn.execute('SELECT s.user_id as id, s.username, u.is_admin, u.telegram_id FROM sessions s JOIN users u ON s.user_id = u.id WHERE s.telegram_id = ?', (telegram_id,)).fetchone()
-    conn.close()
-    return dict(session_data) if session_data else None
+def create_session(telegram_id: int, user_data: sqlite3.Row):
+    """Creates a session for a logged-in user."""
+    # --- FIX 2: This is the core logic fix ---
+    # Check if the user's telegram_id is in the ADMIN_IDS set from config.py
+    is_admin_from_env = telegram_id in ADMIN_IDS
 
-def clear_session(telegram_id):
-    conn = get_db_connection()
-    conn.execute('DELETE FROM sessions WHERE telegram_id = ?', (telegram_id,))
-    conn.commit()
-    conn.close()
+    SESSIONS[telegram_id] = {
+        'id': user_data['id'],
+        'username': user_data['username'],
+        # The user is an admin if their DB flag is set OR their ID is in ADMIN_IDS
+        'is_admin': user_data['is_admin'] or is_admin_from_env
+    }
+    logging.info(f"Session created for user '{user_data['username']}' (ID: {telegram_id}). Admin status: {SESSIONS[telegram_id]['is_admin']}")
 
-# --- User Management ---
-def create_user(username, password, is_admin=False, telegram_id=None):
+def check_session(telegram_id: int):
+    """Checks if a user has an active session."""
+    return SESSIONS.get(telegram_id)
+
+def clear_session(telegram_id: int):
+    """Clears a user's session (logout)."""
+    if telegram_id in SESSIONS:
+        del SESSIONS[telegram_id]
+
+# --- User Functions ---
+
+def create_user(username, password, is_admin=False):
+    """Creates a new user in the database."""
     conn = get_db_connection()
     try:
-        password_hash = hash_password(password)
-        conn.execute(
-            'INSERT INTO users (username, password_hash, is_admin, telegram_id) VALUES (?, ?, ?, ?)',
-            (username, password_hash, is_admin, telegram_id)
-        )
+        conn.execute("INSERT INTO users (username, password_hash, is_admin) VALUES (?, ?, ?)",
+                     (username, hash_password(password), 1 if is_admin else 0))
         conn.commit()
-        return True, f"User '{username}' created successfully."
+        return True, f"✅ User '{username}' created successfully."
     except sqlite3.IntegrityError:
-        return False, "Username or Telegram ID already exists."
+        return False, f"❌ User '{username}' already exists."
     finally:
         conn.close()
 
-def get_user_by_username(username):
+def get_user_by_username(username: str):
+    """Fetches a user by their username."""
     conn = get_db_connection()
     user = conn.execute('SELECT * FROM users WHERE username = ?', (username,)).fetchone()
     conn.close()
-    return dict(user) if user else None
+    return user
 
-def get_user_by_telegram_id(telegram_id):
+def get_user_by_telegram_id(telegram_id: int):
+    """Fetches a user by their Telegram ID."""
     conn = get_db_connection()
     user = conn.execute('SELECT * FROM users WHERE telegram_id = ?', (telegram_id,)).fetchone()
     conn.close()
-    return dict(user) if user else None
+    return user
 
-def update_balance(user_id, amount, transaction_type='credit'):
+def update_balance(user_id: int, amount: float, transaction_type: str = 'credit'):
+    """Updates a user's balance. 'credit' adds, 'debit' subtracts."""
     conn = get_db_connection()
     if transaction_type == 'credit':
-        conn.execute('UPDATE users SET balance = balance + ? WHERE id = ?', (amount, user_id))
+        conn.execute("UPDATE users SET balance = balance + ? WHERE id = ?", (amount, user_id))
     elif transaction_type == 'debit':
-        conn.execute('UPDATE users SET balance = balance - ? WHERE id = ?', (amount, user_id))
+        conn.execute("UPDATE users SET balance = balance - ? WHERE id = ?", (amount, user_id))
     conn.commit()
     conn.close()
 
-def get_all_users_paged(page=1, per_page=10):
-    offset = (page - 1) * per_page
-    conn = get_db_connection()
-    users = conn.execute('SELECT id, username, balance, is_admin, is_active FROM users ORDER BY id LIMIT ? OFFSET ?', (per_page, offset)).fetchall()
-    conn.close()
-    return [dict(row) for row in users]
-
-# --- Key Management ---
-def bulk_add_keys(duration, keys):
+def delete_user_by_username(username: str):
+    """Deletes a user from the database by username."""
     conn = get_db_connection()
     cursor = conn.cursor()
-    try:
-        data_to_insert = [(key, duration) for key in keys]
-        cursor.executemany('INSERT OR IGNORE INTO license_keys (key, duration_days) VALUES (?, ?)', data_to_insert)
+    cursor.execute("SELECT id FROM users WHERE username = ?", (username,))
+    user = cursor.fetchone()
+    if user:
+        cursor.execute("DELETE FROM users WHERE id = ?", (user['id'],))
         conn.commit()
-        return cursor.rowcount
+        conn.close()
+        return True, f"✅ User '{username}' has been deleted."
+    else:
+        conn.close()
+        return False, f"❌ User '{username}' not found."
+
+# --- Key Functions ---
+
+def bulk_add_keys(duration: int, keys: list):
+    """Adds a list of keys for a specific duration to the database."""
+    conn = get_db_connection()
+    keys_to_insert = [(key, duration) for key in keys]
+    added_count = 0
+    try:
+        cursor = conn.cursor()
+        cursor.executemany("INSERT OR IGNORE INTO keys (key, duration_days) VALUES (?, ?)", keys_to_insert)
+        added_count = cursor.rowcount
+        conn.commit()
+    except sqlite3.Error as e:
+        logging.error(f"Database error during bulk key add: {e}")
     finally:
         conn.close()
+    return added_count
 
-def get_key_stock():
+def find_available_key(duration: int):
+    """Finds an unused key for a specific duration."""
     conn = get_db_connection()
-    stock = conn.execute(
-        'SELECT duration_days, COUNT(*) as count FROM license_keys WHERE is_used = FALSE GROUP BY duration_days'
-    ).fetchall()
+    key = conn.execute("SELECT * FROM keys WHERE duration_days = ? AND is_used = 0 LIMIT 1", (duration,)).fetchone()
     conn.close()
-    return [dict(row) for row in stock]
+    return key
 
-def find_available_key(duration):
+def assign_key_to_user(key_id: int, user_id: int):
+    """Assigns a key to a user, marking it as used."""
     conn = get_db_connection()
-    key = conn.execute(
-        'SELECT id, key FROM license_keys WHERE duration_days = ? AND is_used = FALSE LIMIT 1',
-        (duration,)
-    ).fetchone()
-    conn.close()
-    return dict(key) if key else None
-
-def assign_key_to_user(key_id, user_id):
-    conn = get_db_connection()
-    conn.execute(
-        "UPDATE license_keys SET is_used = TRUE, user_id = ?, activation_date = DATE('now') WHERE id = ?",
-        (user_id, key_id)
-    )
+    today = datetime.date.today().isoformat()
+    conn.execute("UPDATE keys SET is_used = 1, user_id = ?, activation_date = ? WHERE id = ?", (user_id, today, key_id))
+    # Also associate the telegram_id with the user account if it's not already there
+    user = conn.execute("SELECT telegram_id FROM users WHERE id = ?", (user_id,)).fetchone()
+    if user and user['telegram_id'] is None:
+        session_telegram_id = next((tid for tid, s in SESSIONS.items() if s['id'] == user_id), None)
+        if session_telegram_id:
+            conn.execute("UPDATE users SET telegram_id = ? WHERE id = ?", (session_telegram_id, user_id))
     conn.commit()
     conn.close()
 
-# --- Settings Management ---
-def set_setting(key, value):
+def get_user_purchase_history(user_id: int):
+    """Retrieves all keys purchased by a user."""
     conn = get_db_connection()
-    conn.execute('INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)', (key, value))
-    conn.commit()
+    history = conn.execute("SELECT key, duration_days, activation_date FROM keys WHERE user_id = ? ORDER BY activation_date DESC", (user_id,)).fetchall()
     conn.close()
+    return history
 
-def get_setting(key, default=None):
+# --- Settings & Stats ---
+
+def get_setting(key: str, default=None):
+    """Gets a value from the settings table."""
     conn = get_db_connection()
-    setting = conn.execute('SELECT value FROM settings WHERE key = ?', (key,)).fetchone()
+    setting = conn.execute("SELECT value FROM settings WHERE key = ?", (key,)).fetchone()
     conn.close()
     return setting['value'] if setting else default
 
-# --- Stats & History ---
-def get_bot_stats():
+def set_setting(key: str, value: str):
+    """Sets a value in the settings table."""
     conn = get_db_connection()
-    stats = {}
-    stats['total_users'] = conn.execute('SELECT COUNT(*) FROM users').fetchone()[0]
-    stats['total_keys_sold'] = conn.execute('SELECT COUNT(*) FROM license_keys WHERE is_used = TRUE').fetchone()[0]
-    total_earnings_query = conn.execute(
-        """
-        SELECT SUM(
-            CASE duration_days 
-            WHEN 1 THEN 2.00 
-            WHEN 7 THEN 7.00 
-            WHEN 30 THEN 15.00 
-            ELSE 0 END
-        ) 
-        FROM license_keys WHERE is_used = TRUE
-        """
-    ).fetchone()[0]
-    stats['total_earnings'] = total_earnings_query if total_earnings_query is not None else 0.0
-    stats['keys_in_stock'] = conn.execute('SELECT COUNT(*) FROM license_keys WHERE is_used = FALSE').fetchone()[0]
+    conn.execute("INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)", (key, value))
+    conn.commit()
     conn.close()
-    return stats
 
-def get_user_purchase_history(user_id):
+def get_key_stock():
+    """Gets the count of unused keys, grouped by duration."""
     conn = get_db_connection()
-    try:
-        history = conn.execute(
-            'SELECT key, duration_days, activation_date FROM license_keys WHERE user_id = ? ORDER BY activation_date DESC',
-            (user_id,)
-        ).fetchall()
-        return [dict(row) for row in history]
-    finally:
-        conn.close()
+    stock = conn.execute("""
+        SELECT duration_days, COUNT(*) as count 
+        FROM keys 
+        WHERE is_used = 0 
+        GROUP BY duration_days
+    """).fetchall()
+    conn.close()
+    return stock
 
-def delete_user_by_username(username):
+def get_bot_stats():
+    """Retrieves general statistics for the admin panel."""
     conn = get_db_connection()
-    try:
-        user = conn.execute('SELECT id, is_admin FROM users WHERE username = ?', (username,)).fetchone()
-        if not user:
-            return False, "User not found."
-            
-        conn.execute('UPDATE license_keys SET user_id = NULL, activation_date = NULL WHERE user_id = ?', (user['id'],))
-        conn.execute('DELETE FROM sessions WHERE user_id = ?', (user['id'],))
-        conn.execute('DELETE FROM users WHERE id = ?', (user['id'],))
-        conn.commit()
-        return True, f"User '{username}' and all their data has been deleted."
-    finally:
-        conn.close()
+    total_users = conn.execute("SELECT COUNT(*) FROM users").fetchone()[0]
+    total_keys_sold = conn.execute("SELECT COUNT(*) FROM keys WHERE is_used = 1").fetchone()[0]
+    keys_in_stock = conn.execute("SELECT COUNT(*) FROM keys WHERE is_used = 0").fetchone()[0]
+    
+    # Calculate earnings by joining keys and pricing
+    # This is a simplified approach; a real app might store the price at time of sale.
+    earnings_query = """
+        SELECT SUM(p.price) 
+        FROM keys k
+        JOIN (
+            SELECT 1 as days, 2.00 as price
+            UNION ALL SELECT 7, 5.00
+            UNION ALL SELECT 30, 8.00
+        ) p ON k.duration_days = p.days
+        WHERE k.is_used = 1
+    """
+    total_earnings_row = conn.execute(earnings_query).fetchone()
+    total_earnings = total_earnings_row[0] if total_earnings_row and total_earnings_row[0] is not None else 0.0
 
-def toggle_user_active_status(user_id): pass 
-def reset_user_device_id(user_id): pass
+    conn.close()
+    return {
+        'total_users': total_users,
+        'total_keys_sold': total_keys_sold,
+        'total_earnings': total_earnings,
+        'keys_in_stock': keys_in_stock
+    }

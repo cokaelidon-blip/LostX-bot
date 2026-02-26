@@ -6,12 +6,9 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # --- Bot Configuration ---
-# Get your bot token from your environment variables
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 
 # --- Pricing Configuration ---
-# Define the pricing plans for license keys.
-# 'plan_id': { 'days': duration_in_days, 'price': cost_in_dollars, 'label': text_on_button }
 PRICING = {
     'plan_1': {'days': 1,  'price': 2.00, 'label': '1-Day Access'},
     'plan_2': {'days': 7,  'price': 5.00, 'label': '7-Day Access'},
@@ -21,3 +18,9 @@ PRICING = {
 # --- Admin Credentials (Loaded from environment variables) ---
 ADMIN_USERNAME = os.getenv("ADMIN_USERNAME")
 ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD")
+
+# --- THIS IS THE FIX ---
+# This code reads the ADMIN_IDS variable, splits it by commas,
+# and creates a set of integer IDs for fast lookups.
+admin_ids_str = os.getenv("ADMIN_IDS", "")
+ADMIN_IDS = {int(uid.strip()) for uid in admin_ids_str.split(',') if uid.strip().isdigit()}

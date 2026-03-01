@@ -4,9 +4,11 @@ from telegram import Update
 from telegram.ext import ContextTypes, ConversationHandler
 from telegram.constants import ParseMode
 
-# --- FIX 1: Import the new database function ---
+# --- THIS IS THE FIX ---
+# 'get_user_by_telegram_id' has been added to the import list.
 from database import (check_session, create_session, clear_session,
-                      get_user_by_username, hash_password, get_db_connection, link_telegram_id_to_user)
+                      get_user_by_username, hash_password, get_db_connection, 
+                      link_telegram_id_to_user, get_user_by_telegram_id)
                       
 from keyboards import (get_start_keyboard, get_dashboard_keyboard, 
                        get_admin_panel_keyboard)
@@ -17,20 +19,24 @@ USERNAME, PASSWORD = range(2)
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handles the /start command."""
     user = update.effective_user
-    # Ensure user has a session and is linked in DB upon /start
     session = check_session(user.id)
+    
     if session:
+        # Double-check the user's DB record is linked, just in case.
         user_db = get_user_by_telegram_id(user.id)
         if not user_db:
             link_telegram_id_to_user(session['id'], user.id)
 
         # User is logged in, show the appropriate dashboard
-        if session.get('is_admin'):
+        is_admin = session.get('is_admin', False)
+        if is_admin:
             text = f"Welcome back, Admin {html.escape(session['username'])}!"
-            keyboard = get_admin_panel_keyboard()
+            # Use get_dashboard_keyboard for admins to show all options
+            keyboard = get_dashboard_keyboard(is_admin=True)
         else:
             text = f"Welcome back, {html.escape(session['username'])}!"
-            keyboard = get_dashboard_keyboard(session.get('is_admin', False))
+            keyboard = get_dashboard_keyboard(is_admin=False)
+        
         await update.message.reply_text(text, reply_markup=keyboard, parse_mode=ParseMode.HTML)
     else:
         # User is not logged in, show the login prompt
@@ -51,28 +57,26 @@ async def login_username(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     await update.message.reply_text("Please enter your password:")
     return PASSWORD
 
-# --- FIX 2: This function is heavily modified ---
 async def login_password(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Receives password, verifies credentials, links Telegram ID, and ends conversation."""
     username = context.user_data.get('username')
     password = update.message.text
     
-    user = get_user_by_username(username)
+    user_db_record = get_user_by_username(username)
 
-    if user and user['password_hash'] == hash_password(password):
+    if user_db_record and user_db_record['password_hash'] == hash_password(password):
         telegram_id = update.effective_user.id
         
-        # This is the core fix: Link the user's account to their Telegram ID in the database.
-        if not user['telegram_id'] or user['telegram_id'] != telegram_id:
-             link_telegram_id_to_user(user['id'], telegram_id)
+        # Link the user's account to their Telegram ID in the database.
+        if not user_db_record['telegram_id'] or user_db_record['telegram_id'] != telegram_id:
+             link_telegram_id_to_user(user_db_record['id'], telegram_id)
         
-        create_session(telegram_id, user)
+        # Create a session for the user
+        create_session(telegram_id, user_db_record)
         await update.message.reply_text("✅ Login successful!")
         
-        # Call start to display the correct dashboard
-        # We need a dummy message object for start() to reply to
-        dummy_update = Update(update.update_id, message=update.message)
-        await start(dummy_update, context)
+        # Call start() to display the correct dashboard
+        await start(update, context)
     else:
         await update.message.reply_text("❌ Invalid username or password. Please try again or type /cancel.")
         # Ask for username again to restart the login flow cleanly
@@ -86,9 +90,7 @@ async def cancel_login(update: Update, context: ContextTypes.DEFAULT_TYPE) -> in
     """Cancels and ends the login conversation."""
     context.user_data.clear()
     await update.message.reply_text("Login cancelled.")
-    # We need a dummy message object for start() to reply to
-    dummy_update = Update(update.update_id, message=update.message)
-    await start(dummy_update, context)
+    await start(update, context)
     return ConversationHandler.END
 
 # --- Logout ---

@@ -4,7 +4,6 @@ from telegram import Update
 from telegram.ext import ContextTypes
 from telegram.constants import ParseMode
 
-# --- CHANGE 1: Import 'get_key_stock' ---
 from database import (check_session, get_user_by_telegram_id, 
                       get_user_purchase_history, get_setting, 
                       find_available_key, assign_key_to_user, update_balance, get_key_stock)
@@ -55,7 +54,10 @@ async def check_balance_callback(update: Update, context: ContextTypes.DEFAULT_T
         return
 
     user_db = get_user_by_telegram_id(update.effective_user.id)
-    balance = user_db.get('balance', 0.0) if user_db else 0.0
+    
+    # --- THIS IS THE FIX ---
+    # Changed from the faulty user_db.get('balance') to the correct user_db['balance']
+    balance = user_db['balance'] if user_db else 0.0
     
     await query.answer(f"Your current balance is: ${balance:.2f}", show_alert=True)
 
@@ -79,17 +81,14 @@ async def history_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 # --- Purchase Flow ---
 
-# --- CHANGE 2: Replace this entire function ---
 async def buy_key_menu_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Shows the menu for buying different key durations, including stock info."""
     query = update.callback_query
     await query.answer()
 
-    # Get key stock from the database and create a map for easy lookup
     stock_data = get_key_stock()
     stock_map = {item['duration_days']: item['count'] for item in stock_data}
 
-    # Format the stock text, using .get(duration, 0) to handle cases where a key type is out of stock
     stock_text = (
         f"📦 *Current Stock*\n"
         f"1-Day Keys: {stock_map.get(1, 0)}\n"
@@ -97,7 +96,6 @@ async def buy_key_menu_callback(update: Update, context: ContextTypes.DEFAULT_TY
         f"30-Day Keys: {stock_map.get(30, 0)}\n\n"
     )
 
-    # Combine stock text with the main message
     main_text = "🛒 *Buy Key*\n\nSelect a plan to purchase. The cost will be deducted from your balance."
     full_text = stock_text + main_text
     
@@ -136,7 +134,6 @@ async def buy_key_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await query.answer(f"Sorry, {duration}-day keys are out of stock. Please contact an admin.", show_alert=True)
         return
 
-    # Process the purchase
     try:
         await query.answer("Processing your purchase...")
         update_balance(user_db['id'], price, 'debit')
@@ -153,5 +150,4 @@ async def buy_key_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     except Exception as e:
         await query.message.reply_text("An unexpected error occurred. Please try again or contact support.")
-        # Refund the user if the transaction failed after debiting
         update_balance(user_db['id'], price, 'credit')

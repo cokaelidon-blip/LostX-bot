@@ -4,10 +4,10 @@ from telegram import Update
 from telegram.ext import ContextTypes, ConversationHandler
 from telegram.constants import ParseMode
 
+# --- FIX 1: Import the new database function ---
 from database import (check_session, create_session, clear_session,
-                      get_user_by_username, hash_password, get_db_connection)
-# --- THIS IS THE FIX ---
-# Correctly imports 'get_start_keyboard' instead of the non-existent ones.
+                      get_user_by_username, hash_password, get_db_connection, link_telegram_id_to_user)
+                      
 from keyboards import (get_start_keyboard, get_dashboard_keyboard, 
                        get_admin_panel_keyboard)
 
@@ -17,9 +17,13 @@ USERNAME, PASSWORD = range(2)
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handles the /start command."""
     user = update.effective_user
+    # Ensure user has a session and is linked in DB upon /start
     session = check_session(user.id)
-
     if session:
+        user_db = get_user_by_telegram_id(user.id)
+        if not user_db:
+            link_telegram_id_to_user(session['id'], user.id)
+
         # User is logged in, show the appropriate dashboard
         if session.get('is_admin'):
             text = f"Welcome back, Admin {html.escape(session['username'])}!"
@@ -47,21 +51,31 @@ async def login_username(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     await update.message.reply_text("Please enter your password:")
     return PASSWORD
 
+# --- FIX 2: This function is heavily modified ---
 async def login_password(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    """Receives the password, verifies credentials, and ends the conversation."""
+    """Receives password, verifies credentials, links Telegram ID, and ends conversation."""
     username = context.user_data.get('username')
     password = update.message.text
     
-    conn = get_db_connection()
-    user = conn.execute('SELECT * FROM users WHERE username = ?', (username,)).fetchone()
-    conn.close()
+    user = get_user_by_username(username)
 
     if user and user['password_hash'] == hash_password(password):
-        create_session(update.effective_user.id, user)
+        telegram_id = update.effective_user.id
+        
+        # This is the core fix: Link the user's account to their Telegram ID in the database.
+        if not user['telegram_id'] or user['telegram_id'] != telegram_id:
+             link_telegram_id_to_user(user['id'], telegram_id)
+        
+        create_session(telegram_id, user)
         await update.message.reply_text("✅ Login successful!")
-        await start(update, context) # Show the correct dashboard
+        
+        # Call start to display the correct dashboard
+        # We need a dummy message object for start() to reply to
+        dummy_update = Update(update.update_id, message=update.message)
+        await start(dummy_update, context)
     else:
         await update.message.reply_text("❌ Invalid username or password. Please try again or type /cancel.")
+        # Ask for username again to restart the login flow cleanly
         await update.message.reply_text("Please enter your username:")
         return USERNAME
 
@@ -72,7 +86,9 @@ async def cancel_login(update: Update, context: ContextTypes.DEFAULT_TYPE) -> in
     """Cancels and ends the login conversation."""
     context.user_data.clear()
     await update.message.reply_text("Login cancelled.")
-    await start(update, context)
+    # We need a dummy message object for start() to reply to
+    dummy_update = Update(update.update_id, message=update.message)
+    await start(dummy_update, context)
     return ConversationHandler.END
 
 # --- Logout ---
